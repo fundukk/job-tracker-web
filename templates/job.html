@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Tracker – Step 2</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Job Tracker – Step 2</h1>
+        <p class="subtitle">Add a job application</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST" action="{{ url_for('add_job') }}">
+            <div class="form-group">
+                <label for="job_url">Job Posting URL:</label>
+                <input 
+                    type="url" 
+                    id="job_url" 
+                    name="job_url" 
+                    placeholder="https://linkedin.com/jobs/view/..." 
+                    required
+                >
+                <small>Paste the link to the job posting (LinkedIn, Indeed, Handshake, etc.)</small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Add Job</button>
+        </form>
+        
+        <div class="actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Change Sheet</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Tracker – Step 1</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Job Tracker – Step 1</h1>
+        <p class="subtitle">Connect your Google Sheet</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST" action="{{ url_for('set_sheet') }}">
+            <div class="form-group">
+                <label for="sheet_url">Google Sheet URL or ID:</label>
+                <input 
+                    type="text" 
+                    id="sheet_url" 
+                    name="sheet_url" 
+                    placeholder="https://docs.google.com/spreadsheets/d/..." 
+                    required
+                >
+                <small>Paste the full URL or just the sheet ID</small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Connect Sheet</button>
+        </form>
+        
+        <div class="info-box">
+            <h3>⚠️ Important</h3>
+            <p>Make sure you've shared your Google Sheet with the service account email:</p>
+            <p><code>your-service-account@project.iam.gserviceaccount.com</code></p>
+            <p>Give it <strong>Editor</strong> access.</p>
+        </div>
+    </div>
+</body>
+</html>

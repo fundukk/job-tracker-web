@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Added Successfully</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Job Added Successfully</h1>
+        
+        <div class="success-box">
+            <h3>Job Details:</h3>
+            <dl>
+                <dt>Position:</dt>
+                <dd>{{ job_data.position or '—' }}</dd>
+                
+                <dt>Company:</dt>
+                <dd>{{ job_data.company or '—' }}</dd>
+                
+                <dt>Location:</dt>
+                <dd>{{ job_data.location or '—' }}</dd>
+                
+                <dt>Salary:</dt>
+                <dd>{{ job_data.salary or '—' }}</dd>
+                
+                <dt>Job Type:</dt>
+                <dd>{{ job_data.job_type or '—' }}</dd>
+                
+                <dt>Remote:</dt>
+                <dd>{{ job_data.remote or '—' }}</dd>
+                
+                <dt>Source:</dt>
+                <dd>{{ job_data.source or '—' }}</dd>
+            </dl>
+        </div>
+        
+        <div class="actions">
+            <a href="{{ url_for('job') }}" class="btn btn-primary">Add Another Job</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Change Sheet</a>
+        </div>
+    </div>
+</body>
+</html>
