@@ -32,7 +32,10 @@ Use this checklist before deploying to production (Render, Railway, etc.).
 - [ ] Service account JSON file created
 - [ ] Google Sheets API enabled in GCP
 - [ ] Google Drive API enabled in GCP
-- [ ] Service account email added to target Google Sheet with Editor access
+- [ ] Service account email added to target Google Sheet with Editor access:
+  ```
+  job-tracker-service@job-tracker-478618.iam.gserviceaccount.com
+  ```
 - [ ] `google_client.py` reads credentials path from environment variable
 
 ### ✅ Git & GitHub
@@ -138,7 +141,10 @@ Railway auto-detects Python apps, but verify:
 - On Railway, ensure base64 decoding logic is correct
 
 ### "Permission denied" on Google Sheet
-- Share sheet with service account email from credentials.json
+- Share sheet with this service account email:
+  ```
+  job-tracker-service@job-tracker-478618.iam.gserviceaccount.com
+  ```
 - Grant Editor (not Viewer) permissions
 - Verify APIs are enabled in Google Cloud Console
 

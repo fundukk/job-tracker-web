@@ -79,7 +79,11 @@ pip install -r requirements.txt
 ### Step 5: Create Google Sheet
 
 1. Create a new Google Sheet
-2. Share it with the service account email (found in `credentials.json` under `client_email`)
+2. Share it with the service account email:
+   ```
+   job-tracker-service@job-tracker-478618.iam.gserviceaccount.com
+   ```
+   (Also found in `credentials.json` under `client_email`)
 3. Give it **Editor** permissions
 4. Copy the sheet URL or ID
 
@@ -276,7 +280,10 @@ The app converts salaries to annual equivalents:
 - Or check that volume mount contains `credentials.json`
 
 ### "Error connecting to sheet"
-- **Service Account Access**: Ensure the service account email (from `credentials.json`) is added to your Google Sheet with Editor permissions
+- **Service Account Access**: Ensure this service account email is added to your Google Sheet with Editor permissions:
+  ```
+  job-tracker-service@job-tracker-478618.iam.gserviceaccount.com
+  ```
 - **Sheet URL**: Verify the sheet URL or ID is correct
 - **APIs Enabled**: Confirm Google Sheets API and Google Drive API are enabled in Google Cloud Console
 
