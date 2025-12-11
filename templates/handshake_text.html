@@ -25,7 +25,7 @@
             2. Paste the text below
         </div>
         
-        <form method="POST" action="{{ url_for('parse_handshake') }}">
+        <form method="POST" action="{{ url_for('main.parse_handshake') }}">
             <div class="form-group">
                 <label for="job_text">Job Description:</label>
                 <textarea 
@@ -41,7 +41,7 @@
         </form>
         
         <div class="actions">
-            <a href="{{ url_for('job') }}" class="btn btn-secondary">← Back to URL Input</a>
+            <a href="{{ url_for('main.job') }}" class="btn btn-secondary">← Back to URL Input</a>
         </div>
     </div>
 </body>

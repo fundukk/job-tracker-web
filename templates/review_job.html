@@ -176,7 +176,7 @@
                 <p>Review the parsed data below and edit any field before saving</p>
             </div>
             
-            <form method="POST" action="{{ url_for('add_job') }}">
+            <form method="POST" action="{{ url_for('main.add_job') }}">
                 <div class="form-grid">
                     <!-- Position -->
                     <div class="form-group">
@@ -319,7 +319,7 @@
                     <button type="submit" class="btn-save">
                         💾 Save to Google Sheet
                     </button>
-                    <a href="{{ url_for('job') }}" class="btn-cancel">Cancel</a>
+                    <a href="{{ url_for('main.job') }}" class="btn-cancel">Cancel</a>
                 </div>
             </form>
         </div>

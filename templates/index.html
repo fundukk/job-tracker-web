@@ -19,7 +19,7 @@
             {% endif %}
         {% endwith %}
         
-        <form method="POST" action="{{ url_for('set_sheet') }}">
+        <form method="POST" action="{{ url_for('main.set_sheet') }}">
             <div class="form-group">
                 <label for="sheet_url">Google Sheet URL or ID:</label>
                 <input 
@@ -39,7 +39,7 @@
             <h3>ℹ️ Getting Started</h3>
             <p>You're logged in with Google. Now enter your Google Sheet URL below.</p>
             <p>Make sure your Google account has <strong>Editor</strong> access to the sheet.</p>
-            <p><a href="{{ url_for('logout') }}" style="color: #7c3aed;">Log out</a></p>
+            <p><a href="{{ url_for('auth.logout') }}" style="color: #7c3aed;">Log out</a></p>
         </div>
     </div>
 </body>

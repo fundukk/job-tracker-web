@@ -19,7 +19,7 @@
             {% endif %}
         {% endwith %}
         
-        <form method="POST" action="{{ url_for('job') }}">
+        <form method="POST" action="{{ url_for('main.job') }}">
             <div class="form-group">
                 <label for="job_url">Job Posting URL:</label>
                 <input 
@@ -36,7 +36,7 @@
         </form>
         
         <div class="actions">
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Change Sheet</a>
+            <a href="{{ url_for('main.index') }}" class="btn btn-secondary">Change Sheet</a>
         </div>
     </div>
 </body>
