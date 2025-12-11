@@ -124,3 +124,28 @@ def register_error_handlers(app):
         return render_template('error.html',
                              error="Internal Server Error",
                              message="Something went wrong on our end. Please try again later."), 500
+
+
+# Lazy initialization for production (gunicorn)
+# The app is only created when this attribute is accessed
+_app = None
+
+
+def get_app():
+    """Get or create the Flask application instance (lazy initialization)."""
+    global _app
+    if _app is None:
+        _app = create_app()
+    return _app
+
+
+# For gunicorn: expose app as a module-level variable that creates on first access
+# This uses a property-like pattern via __getattr__
+def __getattr__(name):
+    """
+    Module-level __getattr__ for lazy app initialization.
+    This allows 'from app import app' to work without immediate initialization.
+    """
+    if name == 'app':
+        return get_app()
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

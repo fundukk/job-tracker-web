@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
 Job Tracker Web Application
-Entry point for the Flask application using factory pattern.
+Entry point for local development with Flask's built-in server.
+For production, gunicorn imports directly from: app:app
 """
-from app import create_app
-
-# Create the Flask application instance
-app = create_app()
+from app import app
 
 if __name__ == '__main__':
     # Run in development mode
