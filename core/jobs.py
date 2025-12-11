@@ -16,22 +16,192 @@ USE_NEW_PARSER = False
 if USE_NEW_PARSER:
     from core.parsers import linkedin, handshake, generic
 
+# Salary time markers pattern for Handshake parser
+TIME_MARKERS_PATTERN = r"(?:/yr|/year|per year|yr|/mo|/month|per month|month|mo|/hr|/hour|per hour|hr)\b"
+
+
+def parse_handshake_text(text: str):
+    """Parse copied text from Handshake job page."""
+    position = ""
+    company = ""
+    location = ""
+    salary = ""
+    job_type = ""
+    remote_hint = ""
+    
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    text_lower = text.lower()
+    
+    # Noise patterns to skip
+    noise_patterns = [
+        r'^\d+\s+profile\s+views?$',
+        r'^skip to',
+        r'^menu$',
+        r'^navigation$',
+        r'^home$',
+        r'^jobs$',
+        r'^sign in$',
+        r'^log in$',
+        r'^search$',
+        r'^get the app$',
+        r'^save$',
+        r'^share$',
+        r'^apply$',
+        r'^follow$',
+        r'in the past \d+ days?$',
+        r'^posted',
+        r'^apply by',
+        r'^={3,}$',
+    ]
+    
+    def is_noise(line: str) -> bool:
+        """Check if a line is noise/navigation."""
+        if not line or len(line.strip()) == 0:
+            return True
+        line_lower = line.lower().strip()
+        if line_lower.isdigit():
+            return True
+        return any(re.match(pattern, line_lower, re.IGNORECASE) for pattern in noise_patterns)
+    
+    # Look for "Company logo" pattern to extract company name
+    logo_line_idx = -1
+    for i, line in enumerate(lines):
+        if "logo" in line.lower():
+            logo_line_idx = i
+            logo_match = re.match(r'^(.+?)\s+logo\s*$', line, re.IGNORECASE)
+            if logo_match and not company:
+                potential_company = logo_match.group(1).strip()
+                if not is_noise(potential_company) and len(potential_company) > 2:
+                    company = potential_company
+            break
+    
+    # If we found a logo line, position is usually the SECOND meaningful line after logo
+    if logo_line_idx >= 0 and not position:
+        start_idx = logo_line_idx + 1
+        seen_first_text = False
+        
+        for i in range(start_idx, min(start_idx + 8, len(lines))):
+            line = lines[i].strip()
+            lower = line.lower()
+            
+            if re.match(r"^posted", lower) or re.search(r"\d+\s+days?\s+ago", lower) or "apply by" in lower:
+                break
+            
+            if company and lower == company.lower():
+                continue
+            
+            if is_noise(line) or len(line) <= 3 or line.isupper():
+                continue
+            
+            if not seen_first_text:
+                seen_first_text = True
+                continue
+            
+            position = line
+            break
+    
+    # Try to find labeled fields as fallback
+    i = 0
+    while i < len(lines) and (not position or not company):
+        line_lower = lines[i].lower()
+        
+        if not position and line_lower == "position" and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            if not is_noise(next_line):
+                position = next_line
+                i += 2
+                continue
+        
+        elif not company and line_lower == "company" and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            if not is_noise(next_line):
+                company = next_line
+                i += 2
+                continue
+        
+        elif line_lower == "location" and i + 1 < len(lines):
+            location = lines[i + 1].strip()
+            i += 2
+            continue
+        
+        elif line_lower == "salary" and i + 1 < len(lines):
+            salary = lines[i + 1].strip()
+            i += 2
+            continue
+        
+        elif line_lower in ["jobtype", "job type", "employment type"] and i + 1 < len(lines):
+            job_type = lines[i + 1].strip()
+            i += 2
+            continue
+        
+        elif line_lower == "remote" and i + 1 < len(lines):
+            remote_hint = lines[i + 1].strip()
+            i += 2
+            continue
+        
+        i += 1
+    
+    # Fallback: if position or company still empty, find meaningful lines
+    if not position or not company:
+        label_words = {"position", "company", "location", "salary", "jobtype", "job type", "remote", "employment type"}
+        skip_keywords = {"profile", "view", "follow"}
+        meaningful_lines = []
+        
+        for line in lines:
+            if (not is_noise(line) 
+                and line.lower() not in label_words 
+                and len(line) > 5
+                and not any(kw in line.lower() for kw in skip_keywords)
+                and not re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2}$', line)):
+                meaningful_lines.append(line)
+        
+        if not position and meaningful_lines:
+            position = meaningful_lines[0]
+        
+        if not company and len(meaningful_lines) > 1:
+            company = meaningful_lines[1]
+    
+    # Fallback: Location pattern matching
+    if not location:
+        loc_match = re.search(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})', text)
+        if loc_match:
+            location = loc_match.group(1)
+    
+    # Salary
+    if not salary:
+        salary_match = re.search(
+            rf"\$\s*[\d,]+(?:\.\d+)?\s*(?:k|K)?(?:\s*[-–]\s*\$?\s*[\d,]+(?:\.\d+)?\s*(?:k|K)?)?\s*{TIME_MARKERS_PATTERN}",
+            text,
+            re.IGNORECASE,
+        )
+        if salary_match:
+            salary = salary_match.group(0).strip()
+    
+    # Remote/Hybrid
+    if not remote_hint:
+        if "remote" in text_lower:
+            remote_hint = "Remote"
+        elif "hybrid" in text_lower:
+            remote_hint = "Hybrid"
+    
+    # Job type
+    if not job_type:
+        if any(word in text_lower for word in ["internship", "intern position"]):
+            job_type = "Internship"
+        elif "full-time" in text_lower or "full time" in text_lower:
+            job_type = "Full-time"
+        elif "part-time" in text_lower or "part time" in text_lower:
+            job_type = "Part-time"
+        elif "contract" in text_lower:
+            job_type = "Contract"
+    
+    return position, company, location, salary, job_type, remote_hint
+
 
 def parse_handshake_text_wrapper(text: str, job_url: str) -> dict:
     """
-    Wrapper for parse_handshake_text from CLI.
-    Returns standardized job_data dict for web app.
+    Parse Handshake text and return standardized job_data dict for web app.
     """
-    import sys
-    from pathlib import Path
-    
-    # Add parent directory to path to import job_tracker
-    parent_dir = Path(__file__).resolve().parent.parent.parent
-    if str(parent_dir) not in sys.path:
-        sys.path.insert(0, str(parent_dir))
-    
-    from job_tracker import parse_handshake_text
-    
     position, company, location, salary, job_type, remote_hint = parse_handshake_text(text)
     
     return {
