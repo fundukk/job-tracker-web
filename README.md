@@ -1,102 +1,123 @@
 # Job Application Tracker
 
-A Flask web application that scrapes job postings from LinkedIn and Handshake, parses job details automatically, and saves them to Google Sheets for easy tracking.
+A production-ready Flask web application that scrapes job postings from LinkedIn, Handshake, and other platforms, parses job details automatically, and saves them to Google Sheets for easy tracking.
 
 ## Features
 
-- 🔍 **Automatic Job Parsing**: Paste a job URL and the app extracts position, company, location, salary, and more
+- 🔐 **Google OAuth 2.0**: Secure authentication with your Google account
+- 🔍 **Automatic Job Parsing**: Paste a job URL and extract position, company, location, salary, and more
 - 📋 **Multi-Platform Support**: Works with LinkedIn, Handshake, Indeed, Glassdoor, and other job boards
 - ✏️ **Review & Edit**: Review parsed data and make corrections before saving
 - 💰 **Salary Normalization**: Automatically converts hourly/monthly salaries to annual equivalents
 - 🔄 **Duplicate Detection**: Prevents adding the same job URL twice
 - 🗑️ **Trash Sheet**: Replaced/deleted jobs are moved to a separate "Trash" sheet
 - 📊 **Google Sheets Integration**: All data stored in your own Google Sheet
+- 🧪 **Test Suite**: Comprehensive pytest tests for reliability
+- 📝 **Structured Logging**: Production-ready logging for debugging
 
-## Project Structure
+## Architecture
+
+This application follows Flask best practices with a modular structure:
 
 ```
 job-tracker-web/
-├── app.py                    # Flask application and routes (entrypoint)
-├── google_client.py          # Google Sheets authentication module
-├── requirements.txt          # Python dependencies
-├── .env.example             # Environment variables template
-├── .gitignore               # Git ignore rules
-├── core/                    # Core functionality
-│   ├── jobs.py              # Job URL parsing logic
+├── app/                     # Main application package
+│   ├── __init__.py          # Flask app factory with logging and error handlers
+│   ├── auth.py              # Google OAuth 2.0 authentication blueprint
+│   ├── routes.py            # Main UI routes blueprint
 │   ├── sheets.py            # Google Sheets operations
-│   ├── salary.py            # Salary normalization
-│   └── parsers/             # Platform-specific parsers
+│   └── parsers/             # Job parsing modules
+│       ├── __init__.py      # Parser registry and main interface
+│       ├── linkedin.py      # LinkedIn parser
+│       ├── handshake.py     # Handshake parser
+│       └── generic.py       # Fallback parser
+├── app.py                   # Application entry point
+├── requirements.txt         # Python dependencies
+├── pytest.ini              # Test configuration
+├── tests/                   # Unit tests
 ├── templates/               # HTML templates
 └── static/                  # CSS and static files
 ```
 
-## Local Development Setup
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.8 or higher
-- Google Cloud service account with Sheets API enabled
-- Google Sheet for storing job applications
+- Google Cloud project with OAuth 2.0 credentials
+- Google account for authentication
 
-### Step 1: Clone the Repository
+### Local Development
 
-```bash
-git clone <your-repo-url>
-cd job-tracker-web
-```
+1. **Clone and setup**:
+   ```bash
+   git clone <your-repo-url>
+   cd job-tracker-web
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-### Step 2: Create Virtual Environment
+2. **Configure Google OAuth** (see detailed instructions below)
 
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+3. **Set environment variables**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your values
+   ```
 
-### Step 3: Install Dependencies
+4. **Run the app**:
+   ```bash
+   flask run
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+5. **Run tests**:
+   ```bash
+   pytest
+   ```
 
-### Step 4: Set Up Google Service Account
+## Google OAuth 2.0 Setup
+
+### Step 1: Create Google Cloud Project
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing one
-3. Enable **Google Sheets API** and **Google Drive API**
-4. Create a service account:
-   - Go to "IAM & Admin" > "Service Accounts"
-   - Click "Create Service Account"
-   - Give it a name and click "Create"
-   - Grant it "Editor" role
-   - Click "Done"
-5. Create a key:
-   - Click on the service account
-   - Go to "Keys" tab
-   - Click "Add Key" > "Create New Key"
-   - Choose **JSON** format
-   - Download the file and save it as `credentials.json` in the project root
+3. Enable **Google Sheets API**:
+   - Go to "APIs & Services" > "Library"
+   - Search for "Google Sheets API" and enable it
 
-### Step 5: Create Google Sheet
+### Step 2: Configure OAuth Consent Screen
 
-1. Create a new Google Sheet
-2. Share it with the service account email:
-   ```
-   job-tracker-service@job-tracker-478618.iam.gserviceaccount.com
-   ```
-   (Also found in `credentials.json` under `client_email`)
-3. Give it **Editor** permissions
-4. Copy the sheet URL or ID
+1. Go to "APIs & Services" > "OAuth consent screen"
+2. Choose "External" user type
+3. Fill in app information:
+   - App name: "Job Tracker"
+   - User support email: Your email
+   - Developer contact: Your email
+4. Add scopes:
+   - `https://www.googleapis.com/auth/spreadsheets`
+   - `https://www.googleapis.com/auth/userinfo.email`
+   - `https://www.googleapis.com/auth/userinfo.profile`
+   - `openid`
+5. Add test users (for development): Your Google account email
 
-### Step 6: Configure Environment Variables
+### Step 3: Create OAuth 2.0 Credentials
 
-```bash
-cp .env.example .env
-```
+1. Go to "APIs & Services" > "Credentials"
+2. Click "Create Credentials" > "OAuth client ID"
+3. Choose "Web application"
+4. Configure authorized redirect URIs:
+   - For local: `http://localhost:5000/oauth2callback`
+   - For production: `https://your-app.onrender.com/oauth2callback`
+5. Download the JSON file (keep it secure!)
 
-Edit `.env` and set:
+### Step 4: Configure Environment Variables
+
+Create `.env` file:
 ```bash
 SECRET_KEY=your-random-secret-key-here
-GOOGLE_SERVICE_ACCOUNT_FILE=credentials.json
+GOOGLE_OAUTH_CLIENT_SECRET_FILE=/path/to/client_secret.json
+OAUTH_REDIRECT_URI=http://localhost:5000/oauth2callback  # Optional, for local dev
 ```
 
 Generate a secure secret key:
@@ -104,282 +125,153 @@ Generate a secure secret key:
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### Step 7: Run the Application
-
-**Option A: Flask Development Server**
-```bash
-flask run
-```
-
-**Option B: Gunicorn (Production-like)**
-```bash
-gunicorn app:app
-```
-
-Visit `http://127.0.0.1:5000` in your browser.
-
 ## Deployment to Render
 
-### Step 1: Prepare Your Repository
+### Step 1: Prepare Repository
 
-1. Ensure all changes are committed to Git
-2. Push to GitHub:
-   ```bash
-   git add .
-   git commit -m "Prepare for deployment"
-   git push origin main
-   ```
+```bash
+git add .
+git commit -m "Deploy to Render"
+git push origin main
+```
 
 ### Step 2: Create Render Web Service
 
 1. Go to [Render Dashboard](https://dashboard.render.com/)
-2. Click "New +" and select "Web Service"
+2. Click "New +" > "Web Service"
 3. Connect your GitHub repository
-4. Configure the service:
-   - **Name**: `job-tracker` (or your choice)
-   - **Environment**: `Python 3`
+4. Configure:
+   - **Name**: `job-tracker-web`
+   - **Environment**: Python 3
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
-   - **Instance Type**: Free (or your preference)
 
 ### Step 3: Set Environment Variables
 
-In the Render dashboard, go to "Environment" and add:
-
 | Key | Value |
 |-----|-------|
-| `SECRET_KEY` | Generate using `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | `/etc/secrets/credentials.json` |
+| `SECRET_KEY` | Random 32+ character string |
+| `GOOGLE_OAUTH_CLIENT_SECRET_FILE` | `/etc/secrets/google_oauth_client_secret.json` |
 
-### Step 4: Add Credentials as Secret File
+### Step 4: Add Secret File
 
-1. In Render dashboard, go to "Environment" > "Secret Files"
-2. Click "Add Secret File"
-3. Set filename: `/etc/secrets/credentials.json`
-4. Paste the **entire contents** of your `credentials.json` file
-5. Click "Save"
+In Render dashboard:
+1. Go to your service > "Settings"
+2. Find "Secret Files" section
+3. Click "Add Secret File"
+   - **Filename**: `/etc/secrets/google_oauth_client_secret.json`
+   - **Contents**: Paste your OAuth client secret JSON
 
-### Step 5: Deploy
+### Step 5: Update OAuth Redirect URI
 
-1. Click "Create Web Service"
-2. Render will automatically build and deploy your app
-3. Once deployed, visit your app URL (e.g., `https://job-tracker-xyz.onrender.com`)
-
-## Deployment to Railway
-
-### Step 1: Prepare Repository
-Same as Render - ensure code is pushed to GitHub.
-
-### Step 2: Create Railway Project
-
-1. Go to [Railway](https://railway.app/)
-2. Click "New Project"
-3. Select "Deploy from GitHub repo"
-4. Choose your repository
-
-### Step 3: Configure Build & Start Commands
-
-Railway auto-detects Python apps, but verify:
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT`
-
-### Step 4: Set Environment Variables
-
-In Railway settings > Variables, add:
-
-| Key | Value |
-|-----|-------|
-| `SECRET_KEY` | Your random secret key |
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | `credentials.json` |
-
-### Step 5: Upload Credentials
-
-Railway doesn't have built-in secret files. Use one of these methods:
-
-**Method A: Base64 Environment Variable**
-```bash
-# Encode credentials to base64
-base64 -i credentials.json | tr -d '\n' > credentials_b64.txt
-```
-
-Add environment variable:
-- `GOOGLE_CREDENTIALS_BASE64`: (paste the base64 string)
-
-Then update `google_client.py` to decode it:
-```python
-import base64
-import json
-import tempfile
-
-b64_creds = os.environ.get('GOOGLE_CREDENTIALS_BASE64')
-if b64_creds:
-    creds_json = base64.b64decode(b64_creds)
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
-        f.write(creds_json.decode())
-        creds_file = Path(f.name)
-```
-
-**Method B: Railway Volumes**
-Use Railway's volume feature to persist the credentials file.
+1. Go to Google Cloud Console > "Credentials"
+2. Edit your OAuth client
+3. Add authorized redirect URI:
+   ```
+   https://your-app.onrender.com/oauth2callback
+   ```
 
 ### Step 6: Deploy
-Railway will auto-deploy. Monitor logs for any issues.
 
-## Usage Guide
+Click "Create Web Service" and wait for deployment to complete.
 
-### 1. Connect Your Google Sheet
-On the homepage, paste your Google Sheet URL or ID and click "Continue".
+## Usage
 
-### 2. Add a Job
+1. **Visit the app** and log in with Google
+2. **Enter your Google Sheet URL** (any Sheet you have Editor access to)
+3. **Paste a job URL** from LinkedIn, Handshake, Indeed, etc.
+4. **Review the parsed data** and make any corrections
+5. **Save to Sheet** - the job is added with today's date
 
-#### For LinkedIn, Indeed, Glassdoor:
-1. Copy the job posting URL
-2. Paste it into the input field
-3. Click "Add Job"
-4. Review the auto-parsed data
-5. Edit any incorrect fields
-6. Click "Save Job"
+### Supported Job Boards
 
-#### For Handshake:
-1. Paste the Handshake job URL
-2. On the next page, open the job posting
-3. Select all text on the page (Cmd+A / Ctrl+A)
-4. Copy the text (Cmd+C / Ctrl+C)
-5. Paste into the textarea
-6. Click "Continue"
-7. Review and edit the parsed data
-8. Click "Save Job"
-
-### 3. Special Features
-
-**Duplicate Prevention**
-- If you try to add a job URL that already exists in your sheet, the app will reject it and ask for a different job
-
-**Replace Most Recent Job**
-- Check this box if you want to replace the last job you added (useful for mistakes)
-- The old job will be moved to the "Trash" sheet
-
-**Automatic Salary Conversion**
-The app converts salaries to annual equivalents:
-- `$25/hr` → `$25.00/hr (~$52,000/yr)`
-- `$5000/mo` → `$5,000/mo (~$60,000/yr, ~$28.85/hr)`
-- `$120k/yr` → `$120,000/yr (~$57.69/hr)`
-
-## Troubleshooting
-
-### "Google service account credentials not found"
-**Local Development:**
-- Ensure `credentials.json` exists in the project root directory
-
-**Render Deployment:**
-- Verify the secret file is configured at `/etc/secrets/credentials.json`
-- Check that you pasted the entire JSON contents
-
-**Railway Deployment:**
-- Verify environment variable `GOOGLE_CREDENTIALS_BASE64` is set
-- Or check that volume mount contains `credentials.json`
-
-### "Error connecting to sheet"
-- **Service Account Access**: Ensure this service account email is added to your Google Sheet with Editor permissions:
-  ```
-  job-tracker-service@job-tracker-478618.iam.gserviceaccount.com
-  ```
-- **Sheet URL**: Verify the sheet URL or ID is correct
-- **APIs Enabled**: Confirm Google Sheets API and Google Drive API are enabled in Google Cloud Console
-
-### Parser Returns Empty Fields
-- Some job boards may block automated scraping
-- Handshake requires manual text paste (this is by design)
-- Use the review/edit page to manually fill in any missing fields
-
-### Import Errors / Module Not Found
-```bash
-# Ensure you're in the virtual environment
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-
-# Reinstall dependencies
-pip install -r requirements.txt
-```
-
-### Port Already in Use
-```bash
-# Find and kill the process using port 5000
-lsof -ti:5000 | xargs kill -9
-
-# Or run on a different port
-flask run --port 5001
-```
+- ✅ LinkedIn
+- ✅ Handshake (with text paste option)
+- ✅ Indeed
+- ✅ Glassdoor
+- ✅ Generic fallback for other sites
 
 ## Development
 
-### Project Architecture
+### Running Tests
 
-- **`app.py`**: Main Flask application with all routes
-- **`google_client.py`**: Centralized Google Sheets authentication (easy to switch auth methods)
-- **`core/sheets.py`**: Google Sheets CRUD operations
-- **`core/jobs.py`**: Job URL processing and parser routing
-- **`core/salary.py`**: Salary normalization utilities
-- **`core/parsers/`**: Platform-specific parsing logic
+```bash
+# Run all tests
+pytest
 
-### Adding a New Job Board Parser
+# Run with coverage
+pytest --cov=app
 
-1. Create a new parser file in `core/parsers/yoursite.py`
-2. Implement parsing logic following the pattern in existing parsers
-3. Update `core/jobs.py` to route URLs to your new parser
-4. Test with sample URLs from that job board
+# Run specific test file
+pytest tests/test_parsers_linkedin.py
 
-Example:
-```python
-# core/parsers/yoursite.py
-def parse_yoursite_job(html, job_url):
-    soup = BeautifulSoup(html, 'html.parser')
-    
-    position = soup.select_one('.job-title').text.strip()
-    company = soup.select_one('.company-name').text.strip()
-    # ... extract other fields
-    
-    return {
-        'position': position,
-        'company': company,
-        # ... other fields
-    }
+# Run with verbose output
+pytest -v
 ```
 
-### Environment Variables Reference
+### Adding a New Parser
+
+1. Create `app/parsers/yoursite.py`
+2. Implement `parse(html: str, job_url: str) -> dict` function
+3. Add to `PARSERS` dict in `app/parsers/__init__.py`
+4. Write tests in `tests/test_parsers_yoursite.py`
+
+### Code Structure
+
+- **Factory Pattern**: `create_app()` in `app/__init__.py` creates and configures the Flask app
+- **Blueprints**: Routes organized into `auth_bp` (authentication) and `main_bp` (app routes)
+- **Logging**: Structured logging configured at app startup, logs to stdout
+- **Error Handling**: Centralized error handlers for 400/401/403/404/500
+- **OAuth Flow**: Automatic token refresh with session-based credential storage
+
+## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SECRET_KEY` | Yes | `dev-secret-change-in-production` | Flask session secret key |
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | Yes | `credentials.json` | Path to Google service account JSON file |
-| `GOOGLE_AUTH_MODE` | No | `service_account` | Authentication mode (for future OAuth support) |
+| `SECRET_KEY` | Yes | - | Flask session secret (32+ random chars) |
+| `GOOGLE_OAUTH_CLIENT_SECRET_FILE` | Yes | - | Path to OAuth client secret JSON |
+| `OAUTH_REDIRECT_URI` | No | Production URL | OAuth callback URL (for local dev) |
+| `LOG_LEVEL` | No | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
-## Security Notes
+## Troubleshooting
 
-⚠️ **Never commit sensitive files:**
-- `credentials.json` - Contains your Google service account private key
-- `.env` - Contains your secret keys and configuration
+### "Please log in with Google to continue"
 
-These are already in `.gitignore`, but always double-check before pushing to GitHub.
+- Your OAuth session expired
+- Click the login link to re-authenticate
 
-## License
+### "Could not connect to your Google Sheet"
 
-MIT License - see LICENSE file for details
+- Make sure you have Editor access to the Sheet
+- Verify the Sheet URL is correct
+- Try logging out and back in
+
+### "Error parsing job"
+
+- Some job sites may have changed their HTML structure
+- Try the generic fallback or report an issue
+
+### OAuth Errors
+
+- Verify redirect URI matches exactly in Google Console
+- Check that OAuth client secret file is properly configured
+- Ensure all required scopes are added to consent screen
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass: `pytest`
+5. Submit a pull request
 
-## Support
+## License
 
-For issues or questions:
-- Open a GitHub Issue
-- Check existing documentation in the `/docs` folder
-- Review troubleshooting section above
+MIT License - see LICENSE file
 
----
+## Security Notes
 
-**Happy job hunting! 🎯**
+- Never commit `client_secret.json` or `.env` files
+- Use environment variables for all secrets
+- OAuth tokens are stored in session (server-side only)
+- Credentials automatically refresh when expired

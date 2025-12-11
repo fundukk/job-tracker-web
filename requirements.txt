@@ -6,3 +6,5 @@ requests
 beautifulsoup4
 gunicorn
 python-dotenv
+pytest
+pytest-mock
