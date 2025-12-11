@@ -69,7 +69,14 @@ def oauth2callback():
         
         # Exchange authorization code for credentials
         flow = get_oauth_flow()
-        flow.fetch_token(authorization_response=request.url)
+        
+        # IMPORTANT: For production HTTPS, we need to use the full callback URL
+        # request.url might be http:// even when accessed via https:// on Render
+        authorization_response = request.url
+        if authorization_response.startswith('http://'):
+            authorization_response = authorization_response.replace('http://', 'https://', 1)
+        
+        flow.fetch_token(authorization_response=authorization_response)
         
         # Store credentials in session
         credentials = flow.credentials

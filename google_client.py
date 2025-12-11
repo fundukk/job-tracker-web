@@ -18,8 +18,11 @@ SCOPES = [
     "openid"
 ]
 
-# OAuth redirect URI (must match Google Cloud Console configuration)
-REDIRECT_URI = "https://job-tracker-web.onrender.com/oauth2callback"
+# OAuth redirect URI - read from environment or use production default
+REDIRECT_URI = os.environ.get(
+    'OAUTH_REDIRECT_URI',
+    'https://job-tracker-web.onrender.com/oauth2callback'
+)
 
 
 def get_oauth_flow():
