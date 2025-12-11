@@ -266,7 +266,7 @@ MIT License - see LICENSE file
 
 ## Security Notes
 
-- Never commit `client_secret.json` or `.env` files
+- Never commit `.env` files to version control
 - Use environment variables for all secrets
 - OAuth tokens are stored in session (server-side only)
 - Credentials automatically refresh when expired

@@ -6,8 +6,7 @@ Handles login, logout, and OAuth callback for the job tracker app.
 import os
 import logging
 from functools import wraps
-from pathlib import Path
-from flask import Blueprint, request, redirect, url_for, session, flash, current_app
+from flask import Blueprint, request, redirect, url_for, session, flash
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
