@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Google Sheets integration using service account."""
+"""Google Sheets integration using OAuth 2.0."""
 import os
 import gspread
-from google.oauth2.service_account import Credentials
 from pathlib import Path
 from datetime import date
 from google_client import get_gspread_client as get_client
@@ -23,9 +22,17 @@ COLUMNS = [
 ]
 
 
-def get_gspread_client():
-    """Authorize using credentials and return a gspread client."""
-    return get_client()
+def get_gspread_client(credentials_dict):
+    """
+    Authorize using OAuth credentials and return a gspread client.
+    
+    Args:
+        credentials_dict: OAuth credentials from Flask session
+        
+    Returns:
+        gspread.Client: Authorized client
+    """
+    return get_client(credentials_dict)
 
 
 def extract_spreadsheet_id(sheet_url_or_id: str) -> str:
@@ -40,9 +47,18 @@ def extract_spreadsheet_id(sheet_url_or_id: str) -> str:
     return raw
 
 
-def get_worksheet(sheet_url_or_id: str):
-    """Return the first worksheet of the sheet."""
-    client = get_gspread_client()
+def get_worksheet(sheet_url_or_id: str, credentials_dict):
+    """
+    Return the first worksheet of the sheet.
+    
+    Args:
+        sheet_url_or_id: Google Sheet URL or ID
+        credentials_dict: OAuth credentials from Flask session
+        
+    Returns:
+        gspread.Worksheet: The first worksheet
+    """
+    client = get_gspread_client(credentials_dict)
     sheet_id = extract_spreadsheet_id(sheet_url_or_id)
     
     # Open spreadsheet by ID

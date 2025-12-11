@@ -5,6 +5,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from core.sheets import get_worksheet, append_job_row, replace_job_by_link, replace_last_job, extract_spreadsheet_id
 from core.jobs import process_job_url, validate_job_url
 from core.salary import normalize_salary
+from google_client import get_oauth_flow, credentials_to_dict, credentials_from_dict
 
 # Load environment variables from .env file (for local development)
 load_dotenv()
@@ -13,13 +14,88 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 
 
+def require_oauth(f):
+    """Decorator to ensure user is authenticated with Google OAuth."""
+    def decorated_function(*args, **kwargs):
+        if 'credentials' not in session:
+            # Store the intended destination
+            session['next_url'] = request.url
+            flash('Please log in with Google to continue', 'warning')
+            return redirect(url_for('auth_google'))
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+
 @app.route('/')
 def index():
-    """Step 1: Ask user for Google Sheet link."""
+    """Step 1: Ask user for Google Sheet link (requires OAuth)."""
+    # Check if user is authenticated
+    if 'credentials' not in session:
+        return redirect(url_for('auth_google'))
     return render_template('index.html')
 
 
+@app.route('/auth/google')
+def auth_google():
+    """Initiate Google OAuth flow."""
+    try:
+        flow = get_oauth_flow()
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'  # Force consent screen to get refresh token
+        )
+        
+        # Store state in session for verification
+        session['state'] = state
+        
+        return redirect(authorization_url)
+    
+    except Exception as e:
+        flash(f'Error initiating Google login: {str(e)}', 'error')
+        return render_template('error.html', error=str(e))
+
+
+@app.route('/oauth2callback')
+def oauth2callback():
+    """Handle OAuth callback from Google."""
+    try:
+        # Verify state
+        state = session.get('state')
+        if not state or state != request.args.get('state'):
+            flash('Invalid state parameter. Please try logging in again.', 'error')
+            return redirect(url_for('index'))
+        
+        # Exchange authorization code for credentials
+        flow = get_oauth_flow()
+        flow.fetch_token(authorization_response=request.url)
+        
+        # Store credentials in session
+        credentials = flow.credentials
+        session['credentials'] = credentials_to_dict(credentials)
+        
+        flash('Successfully logged in with Google!', 'success')
+        
+        # Redirect to intended destination or index
+        next_url = session.pop('next_url', None)
+        return redirect(next_url or url_for('index'))
+    
+    except Exception as e:
+        flash(f'Error completing Google login: {str(e)}', 'error')
+        return redirect(url_for('index'))
+
+
+@app.route('/logout')
+def logout():
+    """Log out user by clearing session."""
+    session.clear()
+    flash('Successfully logged out', 'success')
+    return redirect(url_for('index'))
+
+
 @app.route('/set_sheet', methods=['POST'])
+@require_oauth
 def set_sheet():
     """Validate and store the Google Sheet link."""
     sheet_url = request.form.get('sheet_url', '').strip()
@@ -29,9 +105,10 @@ def set_sheet():
         return redirect(url_for('index'))
     
     try:
-        # Validate that we can access the sheet
+        # Validate that we can access the sheet with OAuth credentials
         sheet_id = extract_spreadsheet_id(sheet_url)
-        ws = get_worksheet(sheet_id)
+        credentials_dict = session.get('credentials')
+        ws = get_worksheet(sheet_id, credentials_dict)
         
         # Store in session
         session['sheet_url'] = sheet_id
@@ -39,11 +116,12 @@ def set_sheet():
         return redirect(url_for('job'))
     
     except Exception as e:
-        flash(f'Error connecting to sheet: {str(e)}', 'error')
+        flash(f'Could not connect to Google Sheets. Please make sure you have access to this sheet and try logging in with Google again.', 'error')
         return redirect(url_for('index'))
 
 
 @app.route('/job', methods=['GET', 'POST'])
+@require_oauth
 def job():
     """Step 2: Ask user for job URL (GET) or parse and review (POST)."""
     if 'sheet_url' not in session:
@@ -85,6 +163,7 @@ def job():
 
 
 @app.route('/parse_handshake', methods=['POST'])
+@require_oauth
 def parse_handshake():
     """Parse Handshake job from copied text."""
     if 'sheet_url' not in session:
@@ -114,6 +193,7 @@ def parse_handshake():
 
 
 @app.route('/add_job', methods=['POST'])
+@require_oauth
 def add_job():
     """Save reviewed/edited job data to Google Sheets."""
     if 'sheet_url' not in session:
@@ -142,9 +222,10 @@ def add_job():
         # Check if user wants to replace last job (manual override)
         replace_last = request.form.get('replace_last_job') == 'on'
         
-        # Get the worksheet
+        # Get the worksheet with OAuth credentials
         sheet_id = session['sheet_url']
-        ws = get_worksheet(sheet_id)
+        credentials_dict = session.get('credentials')
+        ws = get_worksheet(sheet_id, credentials_dict)
         
         if replace_last:
             # Replace the most recent job (row 2)
@@ -166,8 +247,6 @@ def add_job():
                 # No duplicate - add new job
                 append_job_row(ws, job_data)
                 flash('Job added successfully!', 'success')
-        
-        return render_template('success.html', job_data=job_data)
         
         return render_template('success.html', job_data=job_data)
     

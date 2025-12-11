@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Job Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>❌ Error</h1>
+        <p class="subtitle">Something went wrong</p>
+        
+        <div class="alert alert-error">
+            {{ error }}
+        </div>
+        
+        <div class="actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">Go Home</a>
+            <a href="{{ url_for('auth_google') }}" class="btn btn-secondary">Try Logging In Again</a>
+        </div>
+    </div>
+</body>
+</html>

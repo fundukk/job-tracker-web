@@ -1,80 +1,126 @@
 #!/usr/bin/env python3
 """
 Centralized Google Sheets authentication module.
-This module provides a single point of configuration for Google Sheets access,
-making it easy to switch between service account and OAuth authentication.
+Now uses OAuth 2.0 (3-legged) flow instead of service account.
 """
 import os
+import json
 import gspread
-from google.oauth2.service_account import Credentials
 from pathlib import Path
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+
+# OAuth 2.0 scopes required for Google Sheets access
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "openid"
+]
+
+# OAuth redirect URI (must match Google Cloud Console configuration)
+REDIRECT_URI = "https://job-tracker-web.onrender.com/oauth2callback"
 
 
-def get_gspread_client():
+def get_oauth_flow():
     """
-    Get an authenticated gspread client.
+    Create and return a Google OAuth Flow object.
     
-    Currently uses service account authentication.
-    Can be extended to support OAuth in the future.
+    Returns:
+        Flow: Configured OAuth flow
+        
+    Raises:
+        FileNotFoundError: If client secret file not found
+        KeyError: If GOOGLE_OAUTH_CLIENT_SECRET_FILE env var not set
+    """
+    # Get client secret file path from environment
+    client_secret_file = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET_FILE')
     
+    if not client_secret_file:
+        raise KeyError(
+            "GOOGLE_OAUTH_CLIENT_SECRET_FILE environment variable not set. "
+            "Please configure this in your Render dashboard."
+        )
+    
+    client_secret_path = Path(client_secret_file)
+    
+    if not client_secret_path.exists():
+        raise FileNotFoundError(
+            f"OAuth client secret file not found at {client_secret_path}. "
+            f"Please ensure the secret file is configured in Render."
+        )
+    
+    # Create OAuth flow
+    flow = Flow.from_client_secrets_file(
+        client_secret_file,
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI
+    )
+    
+    return flow
+
+
+def credentials_to_dict(credentials):
+    """
+    Convert OAuth credentials to a dictionary for session storage.
+    
+    Args:
+        credentials: google.oauth2.credentials.Credentials object
+        
+    Returns:
+        dict: Serializable credentials dictionary
+    """
+    return {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+
+
+def credentials_from_dict(credentials_dict):
+    """
+    Reconstruct OAuth credentials from a dictionary.
+    
+    Args:
+        credentials_dict: Dictionary containing credentials data
+        
+    Returns:
+        Credentials: google.oauth2.credentials.Credentials object
+    """
+    return Credentials(
+        token=credentials_dict['token'],
+        refresh_token=credentials_dict.get('refresh_token'),
+        token_uri=credentials_dict['token_uri'],
+        client_id=credentials_dict['client_id'],
+        client_secret=credentials_dict['client_secret'],
+        scopes=credentials_dict['scopes']
+    )
+
+
+def get_gspread_client(credentials_dict):
+    """
+    Get an authenticated gspread client using OAuth credentials.
+    
+    Args:
+        credentials_dict: Dictionary containing OAuth credentials from session
+        
     Returns:
         gspread.Client: Authenticated gspread client
         
     Raises:
-        FileNotFoundError: If credentials file not found
-        Exception: If authentication fails
+        ValueError: If credentials_dict is None or invalid
     """
-    auth_mode = os.environ.get('GOOGLE_AUTH_MODE', 'service_account')
-    
-    if auth_mode == 'service_account':
-        return _get_service_account_client()
-    elif auth_mode == 'oauth':
-        # Placeholder for future OAuth implementation
-        raise NotImplementedError("OAuth authentication not yet implemented")
-    else:
-        raise ValueError(f"Unknown GOOGLE_AUTH_MODE: {auth_mode}")
-
-
-def _get_service_account_client():
-    """Get gspread client using service account credentials."""
-    # Get credentials file path from environment or use default
-    base_dir = Path(__file__).resolve().parent
-    default_path = base_dir / "credentials.json"
-    creds_path = os.environ.get('GOOGLE_SERVICE_ACCOUNT_FILE', str(default_path))
-    creds_file = Path(creds_path)
-    
-    if not creds_file.exists():
-        raise FileNotFoundError(
-            f"Google service account credentials not found at {creds_file}. "
-            f"Please ensure GOOGLE_SERVICE_ACCOUNT_FILE environment variable "
-            f"points to a valid credentials.json file, or place credentials.json "
-            f"in the project root."
+    if not credentials_dict:
+        raise ValueError(
+            "No OAuth credentials found. Please log in with Google first."
         )
     
-    # Define required scopes
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
+    # Reconstruct credentials from dictionary
+    credentials = credentials_from_dict(credentials_dict)
     
-    # Authenticate and return client
-    creds = Credentials.from_service_account_file(creds_file, scopes=scopes)
-    client = gspread.authorize(creds)
+    # Authorize and return gspread client
+    client = gspread.authorize(credentials)
     return client
-
-
-# Placeholder for future OAuth implementation
-def _get_oauth_client():
-    """
-    Get gspread client using OAuth credentials.
-    
-    This is a placeholder for future implementation.
-    Will require:
-    - GOOGLE_OAUTH_CLIENT_ID
-    - GOOGLE_OAUTH_CLIENT_SECRET
-    - Token storage/refresh logic
-    """
-    raise NotImplementedError(
-        "OAuth authentication not yet implemented. "
-        "Use service_account mode for now."
-    )
