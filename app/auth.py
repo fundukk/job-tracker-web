@@ -25,49 +25,60 @@ SCOPES = [
     "openid"
 ]
 
-# OAuth redirect URI - read from environment or use production default
-REDIRECT_URI = os.environ.get(
-    'OAUTH_REDIRECT_URI',
-    'https://job-tracker-web.onrender.com/oauth2callback'
-)
-
 
 def get_oauth_flow():
     """
-    Create and return a Google OAuth Flow object.
+    Create and return a Google OAuth Flow object using environment variables.
     
     Returns:
         Flow: Configured OAuth flow
         
     Raises:
-        FileNotFoundError: If client secret file not found
-        KeyError: If GOOGLE_OAUTH_CLIENT_SECRET_FILE env var not set
+        KeyError: If required environment variables are not set
     """
-    client_secret_file = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET_FILE')
-    
-    if not client_secret_file:
-        logger.error("GOOGLE_OAUTH_CLIENT_SECRET_FILE environment variable not set")
-        raise KeyError(
-            "GOOGLE_OAUTH_CLIENT_SECRET_FILE environment variable not set. "
-            "Please configure this in your Render dashboard."
-        )
-    
-    client_secret_path = Path(client_secret_file)
-    
-    if not client_secret_path.exists():
-        logger.error(f"OAuth client secret file not found at {client_secret_path}")
-        raise FileNotFoundError(
-            f"OAuth client secret file not found at {client_secret_path}. "
-            f"Please ensure the secret file is configured in Render."
-        )
-    
-    # Create OAuth flow
-    flow = Flow.from_client_secrets_file(
-        client_secret_file,
-        scopes=SCOPES,
-        redirect_uri=REDIRECT_URI
+    # Get required environment variables
+    client_id = os.environ.get('GOOGLE_CLIENT_ID')
+    client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+    callback_url = os.environ.get(
+        'GOOGLE_CALLBACK_URL',
+        'https://job-tracker-web.onrender.com/auth/google/callback'
     )
     
+    # Validate required credentials
+    if not client_id:
+        logger.error("GOOGLE_CLIENT_ID environment variable not set")
+        raise KeyError(
+            "GOOGLE_CLIENT_ID environment variable not set. "
+            "Please configure this in your environment or Render dashboard."
+        )
+    
+    if not client_secret:
+        logger.error("GOOGLE_CLIENT_SECRET environment variable not set")
+        raise KeyError(
+            "GOOGLE_CLIENT_SECRET environment variable not set. "
+            "Please configure this in your environment or Render dashboard."
+        )
+    
+    # Create client config dictionary
+    client_config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": [callback_url]
+        }
+    }
+    
+    # Create OAuth flow from client config
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=callback_url
+    )
+    
+    logger.debug(f"OAuth flow created with callback URL: {callback_url}")
     return flow
 
 
@@ -184,9 +195,15 @@ def require_oauth(f):
 
 
 @auth_bp.route('/auth/google')
+@auth_bp.route('/auth/google/callback')
 @auth_bp.route('/login')
 def login():
-    """Initiate Google OAuth flow."""
+    """Initiate Google OAuth flow or handle callback."""
+    # Check if this is a callback (has 'code' parameter)
+    if 'code' in request.args:
+        return oauth2callback()
+    
+    # Otherwise, initiate OAuth flow
     try:
         flow = get_oauth_flow()
         authorization_url, state = flow.authorization_url(
@@ -207,7 +224,6 @@ def login():
         return redirect(url_for('main.index'))
 
 
-@auth_bp.route('/oauth2callback')
 def oauth2callback():
     """Handle OAuth callback from Google."""
     try:

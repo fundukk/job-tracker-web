@@ -46,18 +46,18 @@ git push origin main
 Environment Variables:
 ```
 SECRET_KEY=<your-secret-key-from-python-c-import-secrets-print-secrets-token-hex-32>
-GOOGLE_OAUTH_CLIENT_SECRET_FILE=/etc/secrets/google_oauth_client_secret.json
+GOOGLE_CLIENT_ID=<your-client-id>.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=<your-client-secret>
+GOOGLE_CALLBACK_URL=https://your-app.onrender.com/auth/google/callback
 ```
 
-Secret Files:
-- Filename: `/etc/secrets/google_oauth_client_secret.json`
-- Contents: Paste your OAuth client secret JSON
+**Note:** No secret files needed! All credentials are now environment variables.
 
 ### 3. Update OAuth Redirect URI
 
 In Google Cloud Console > Credentials > OAuth 2.0 Client ID:
 ```
-https://your-app.onrender.com/oauth2callback
+https://your-app.onrender.com/auth/google/callback
 ```
 
 ### 4. Deploy
@@ -89,9 +89,9 @@ pytest -v  # See detailed error messages
 
 ### OAuth errors in production
 - Check Render logs
-- Verify GOOGLE_OAUTH_CLIENT_SECRET_FILE points to /etc/secrets/...
-- Verify redirect URI matches exactly
-- Check secret file is uploaded correctly
+- Verify GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set
+- Verify GOOGLE_CALLBACK_URL matches exactly
+- Check redirect URI in Google Cloud Console matches
 
 ### "Module not found" errors
 Make sure you're using the refactored imports:

@@ -107,8 +107,8 @@ job-tracker-web/
 2. Click "Create Credentials" > "OAuth client ID"
 3. Choose "Web application"
 4. Configure authorized redirect URIs:
-   - For local: `http://localhost:5000/oauth2callback`
-   - For production: `https://your-app.onrender.com/oauth2callback`
+   - For local: `http://localhost:5000/auth/google/callback`
+   - For production: `https://your-app.onrender.com/auth/google/callback`
 5. Download the JSON file (keep it secure!)
 
 ### Step 4: Configure Environment Variables
@@ -116,8 +116,9 @@ job-tracker-web/
 Create `.env` file:
 ```bash
 SECRET_KEY=your-random-secret-key-here
-GOOGLE_OAUTH_CLIENT_SECRET_FILE=/path/to/client_secret.json
-OAUTH_REDIRECT_URI=http://localhost:5000/oauth2callback  # Optional, for local dev
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/auth/google/callback
 ```
 
 Generate a secure secret key:
@@ -151,27 +152,20 @@ git push origin main
 | Key | Value |
 |-----|-------|
 | `SECRET_KEY` | Random 32+ character string |
-| `GOOGLE_OAUTH_CLIENT_SECRET_FILE` | `/etc/secrets/google_oauth_client_secret.json` |
+| `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Your Google OAuth client secret |
+| `GOOGLE_CALLBACK_URL` | `https://your-app.onrender.com/auth/google/callback` |
 
-### Step 4: Add Secret File
-
-In Render dashboard:
-1. Go to your service > "Settings"
-2. Find "Secret Files" section
-3. Click "Add Secret File"
-   - **Filename**: `/etc/secrets/google_oauth_client_secret.json`
-   - **Contents**: Paste your OAuth client secret JSON
-
-### Step 5: Update OAuth Redirect URI
+### Step 4: Update OAuth Redirect URI (No Secret Files Needed)direct URI (No Secret Files Needed)
 
 1. Go to Google Cloud Console > "Credentials"
 2. Edit your OAuth client
 3. Add authorized redirect URI:
    ```
-   https://your-app.onrender.com/oauth2callback
+   https://your-app.onrender.com/auth/google/callback
    ```
 
-### Step 6: Deploy
+### Step 5: Deploy
 
 Click "Create Web Service" and wait for deployment to complete.
 
@@ -229,8 +223,9 @@ pytest -v
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `SECRET_KEY` | Yes | - | Flask session secret (32+ random chars) |
-| `GOOGLE_OAUTH_CLIENT_SECRET_FILE` | Yes | - | Path to OAuth client secret JSON |
-| `OAUTH_REDIRECT_URI` | No | Production URL | OAuth callback URL (for local dev) |
+| `GOOGLE_CLIENT_ID` | Yes | - | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Yes | - | Google OAuth client secret |
+| `GOOGLE_CALLBACK_URL` | No | Production URL | OAuth callback URL |
 | `LOG_LEVEL` | No | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 ## Troubleshooting
