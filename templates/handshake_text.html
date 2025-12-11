@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handshake Job – Paste Description</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Handshake Job</h1>
+        <p class="subtitle">Paste the job description text</p>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="field-hint" style="margin-bottom: 1.5rem;">
+            💡 <strong>Quick steps:</strong><br>
+            1. <a href="{{ job_url }}" target="_blank" style="color: #7c3aed;">Open the job</a> → Select all (Cmd+A) → Copy (Cmd+C)<br>
+            2. Paste the text below
+        </div>
+        
+        <form method="POST" action="{{ url_for('parse_handshake') }}">
+            <div class="form-group">
+                <label for="job_text">Job Description:</label>
+                <textarea 
+                    id="job_text" 
+                    name="job_text" 
+                    rows="12" 
+                    placeholder="Paste the job page text here..."
+                    required
+                ></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Continue</button>
+        </form>
+        
+        <div class="actions">
+            <a href="{{ url_for('job') }}" class="btn btn-secondary">← Back to URL Input</a>
+        </div>
+    </div>
+</body>
+</html>
