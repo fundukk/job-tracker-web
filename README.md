@@ -96,10 +96,36 @@ job-tracker-web/
    - Developer contact: Your email
 4. Add scopes:
    - `https://www.googleapis.com/auth/spreadsheets`
+   - `https://www.googleapis.com/auth/drive`
    - `https://www.googleapis.com/auth/userinfo.email`
    - `https://www.googleapis.com/auth/userinfo.profile`
    - `openid`
-5. Add test users (for development): Your Google account email
+5. **Publishing status**:
+   - **Testing mode**: Add test users (emails allowed to use the app)
+   - **Production mode**: Publish app (requires verification for sensitive scopes)
+
+### Step 2.5: Configure Test Users (Required for Testing Mode)
+
+⚠️ **IMPORTANT**: If your app is in "Testing" mode, you MUST configure test users in TWO places:
+
+**A. Google Cloud Console:**
+1. Go to "OAuth consent screen" > "Test users"
+2. Click "Add Users"
+3. Add email addresses of users who should access the app
+4. Save
+
+**B. Environment Variable (GOOGLE_TEST_USERS):**
+This app enforces an additional whitelist for security. Add the same emails to your `.env`:
+
+```bash
+GOOGLE_TEST_USERS=your-email@gmail.com,friend@gmail.com,another@gmail.com
+```
+
+**Why both?**
+- Google Cloud test users: Allows Google to show OAuth consent screen
+- GOOGLE_TEST_USERS: App-level enforcement to restrict access and show friendly error messages
+
+If an email is missing from either list, users will see an "Access Restricted" page with instructions.
 
 ### Step 3: Create OAuth 2.0 Credentials
 
@@ -119,12 +145,23 @@ SECRET_KEY=your-random-secret-key-here
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:5000/auth/google/callback
+GOOGLE_TEST_USERS=your-email@gmail.com,friend@gmail.com
 ```
+
+**Required environment variables:**
+- `SECRET_KEY`: Random secret for Flask sessions (generate with command below)
+- `GOOGLE_CLIENT_ID`: OAuth client ID from Google Cloud Console
+- `GOOGLE_CLIENT_SECRET`: OAuth client secret from Google Cloud Console
+- `GOOGLE_CALLBACK_URL`: OAuth redirect URI (must match Google Console config)
+- `GOOGLE_TEST_USERS`: Comma-separated emails allowed to use app (testing mode only)
 
 Generate a secure secret key:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+**Startup validation:**
+The app will fail fast at startup if `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` are missing, with a clear error message.
 
 ## Deployment to Render
 
@@ -155,6 +192,9 @@ git push origin main
 | `GOOGLE_CLIENT_ID` | Your Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Your Google OAuth client secret |
 | `GOOGLE_CALLBACK_URL` | `https://your-app.onrender.com/auth/google/callback` |
+| `GOOGLE_TEST_USERS` | `your-email@gmail.com,friend@gmail.com` (comma-separated, testing mode only) |
+
+**Note:** Render will automatically restart when you add/update environment variables.
 
 ### Step 4: Update OAuth Redirect URI (No Secret Files Needed)direct URI (No Secret Files Needed)
 

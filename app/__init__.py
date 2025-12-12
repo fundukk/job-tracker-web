@@ -19,6 +19,23 @@ def create_app():
     # Load environment variables from .env file (for local development)
     load_dotenv()
     
+    # Validate required OAuth environment variables at startup
+    required_vars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
+    missing_vars = [var for var in required_vars if not os.environ.get(var)]
+    
+    if missing_vars:
+        error_msg = f"FATAL: Missing required environment variables: {', '.join(missing_vars)}"
+        print(f"\n{'='*80}\n{error_msg}\n{'='*80}\n")
+        raise EnvironmentError(
+            f"{error_msg}. "
+            "Please set these in your .env file (local) or environment (production)."
+        )
+    
+    # Log OAuth config status
+    client_id_prefix = os.environ.get('GOOGLE_CLIENT_ID', '')[:20]
+    test_users_count = len([e for e in os.environ.get('GOOGLE_TEST_USERS', '').split(',') if e.strip()])
+    print(f"OAuth Config - Client ID prefix: {client_id_prefix}..., Test users: {test_users_count}")
+    
     # Create Flask app instance
     app = Flask(__name__,
                 template_folder='../templates',

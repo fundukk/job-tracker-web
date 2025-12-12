@@ -7,7 +7,7 @@ import os
 import logging
 import requests
 from functools import wraps
-from flask import Blueprint, request, redirect, url_for, session, flash
+from flask import Blueprint, request, redirect, url_for, session, flash, render_template
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
@@ -25,6 +25,24 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"
 ]
+
+
+def get_allowed_test_users():
+    """
+    Get list of allowed test user emails from environment variable.
+    
+    Returns:
+        set: Lowercase email addresses allowed to use the app in testing mode
+    """
+    test_users_env = os.environ.get('GOOGLE_TEST_USERS', '')
+    if not test_users_env:
+        logger.warning("GOOGLE_TEST_USERS not set - all users will be allowed (not recommended for testing mode)")
+        return set()
+    
+    # Parse comma-separated emails, strip whitespace, convert to lowercase
+    emails = {email.strip().lower() for email in test_users_env.split(',') if email.strip()}
+    logger.info(f"Loaded {len(emails)} test user email(s) from GOOGLE_TEST_USERS")
+    return emails
 
 
 def get_oauth_flow():
@@ -276,14 +294,68 @@ def oauth2callback():
         
         flow.fetch_token(authorization_response=authorization_response)
         
+        # Get credentials
+        credentials = flow.credentials
+        
+        # Fetch user email from Google userinfo endpoint
+        try:
+            resp = requests.get(
+                'https://www.googleapis.com/oauth2/v2/userinfo',
+                headers={'Authorization': f'Bearer {credentials.token}'},
+                timeout=5
+            )
+            if not resp.ok:
+                logger.error(f"Failed to fetch userinfo: {resp.status_code} {resp.text}")
+                flash('Failed to retrieve user information from Google.', 'error')
+                return redirect(url_for('main.index'))
+            
+            data = resp.json()
+            email = data.get('email')
+            
+            if not email:
+                logger.error("No email in userinfo response")
+                flash('Failed to retrieve email from Google account.', 'error')
+                return redirect(url_for('main.index'))
+            
+            # Log OAuth success details
+            client_id_prefix = credentials.client_id[:20] if credentials.client_id else 'unknown'
+            logger.info(f"OAuth successful - Email: {email}, Client ID prefix: {client_id_prefix}..., Scopes: {credentials.scopes}")
+            
+        except Exception as e:
+            logger.error(f"Error fetching userinfo: {str(e)}", exc_info=True)
+            flash('Error retrieving user information from Google.', 'error')
+            return redirect(url_for('main.index'))
+        
+        # Check if user is in allowed test users list
+        allowed_users = get_allowed_test_users()
+        if allowed_users and email.lower() not in allowed_users:
+            logger.warning(f"Access denied for email: {email} (not in GOOGLE_TEST_USERS)")
+            
+            # Revoke tokens if possible
+            try:
+                revoke_url = 'https://oauth2.googleapis.com/revoke'
+                revoke_resp = requests.post(
+                    revoke_url,
+                    params={'token': credentials.token},
+                    headers={'content-type': 'application/x-www-form-urlencoded'},
+                    timeout=5
+                )
+                logger.info(f"Token revocation status: {revoke_resp.status_code}")
+            except Exception as revoke_error:
+                logger.warning(f"Failed to revoke token: {str(revoke_error)}")
+            
+            # Clear session and show access restricted page
+            session.clear()
+            return render_template('access_restricted.html', email=email)
+        
         # GUARD: Clear any existing session data before storing new credentials
         logger.info("GUARD – Clearing existing session before storing new OAuth credentials")
         session.clear()
         
         # Store credentials in session
-        credentials = flow.credentials
         credentials_dict = credentials_to_dict(credentials)
         session['credentials'] = credentials_dict
+        session['user_email'] = email
         
         # GUARD: Log fresh credentials details
         scopes = credentials_dict.get('scopes', [])
@@ -291,28 +363,10 @@ def oauth2callback():
         logger.info(f"GUARD – Stored NEW credentials in session with token prefix: {token_prefix}...")
         logger.info(f"GUARD – Scopes in new credentials: {scopes}")
         logger.info(f"GUARD – Has refresh_token: {bool(credentials_dict.get('refresh_token'))}")
+        logger.info(f"GUARD – User email: {email}")
         logger.info("GUARD – Credentials are PER-USER session-based, NOT global or cached")
-
-        # Fetch and store basic user info (email) for clearer guidance
-        try:
-            resp = requests.get(
-                'https://www.googleapis.com/oauth2/v2/userinfo',
-                headers={'Authorization': f'Bearer {credentials.token}'},
-                timeout=5
-            )
-            if resp.ok:
-                data = resp.json()
-                email = data.get('email')
-                session['user_email'] = email
-                logger.info(f"User email captured: {email}")
-            else:
-                logger.warning(f"Failed to fetch userinfo: {resp.status_code} {resp.text}")
-                logger.warning("Continuing without email; user will not see it in guidance")
-        except Exception as e:
-            logger.warning(f"Error fetching userinfo: {str(e)}")
-            logger.warning("Continuing without email; user will not see it in guidance")
         
-        logger.info("User successfully authenticated with Google OAuth")
+        logger.info(f"User {email} successfully authenticated with Google OAuth")
         flash('Successfully logged in with Google!', 'success')
         
         # Redirect to intended destination or index
