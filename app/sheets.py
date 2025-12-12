@@ -166,7 +166,7 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         raise
 
 
-def check_write_access(ws) -> bool:
+def check_write_access(ws) -> dict:
     """
     Verify that the current user has write access to the worksheet.
 
@@ -174,20 +174,50 @@ def check_write_access(ws) -> bool:
     modifying content while still exercising write permissions.
 
     Returns:
-        bool: True if write succeeds, False if forbidden or fails.
+        dict: {"ok": True} if write succeeds, 
+              {"ok": False, "http_status": int, "content": str, "exception_type": str} on error
     """
+    # DEBUG – REMOVE AFTER DIAGNOSIS: Return structured error instead of bool
     try:
         # Read existing value from header cell and write it back
         val = ws.cell(1, 1).value or ""
         ws.update_cell(1, 1, val)
-        return True
+        return {"ok": True}
     except gspread.exceptions.APIError as e:
-        # 403 typically indicates insufficient permissions
-        logger.warning(f"Write access check failed: {str(e)}")
-        return False
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Extract detailed Google API error
+        logger.warning(f"Write access check failed: {str(e)}", exc_info=True)
+        error_details = {
+            "ok": False,
+            "exception_type": type(e).__name__,
+            "error_str": str(e)
+        }
+        # Try to extract HTTP error details if available
+        if HttpError and isinstance(e, HttpError):
+            error_details["http_status"] = e.resp.status
+            error_details["http_reason"] = e.resp.reason
+            try:
+                error_details["content"] = e.content.decode("utf-8", "ignore")
+            except:
+                error_details["content"] = str(e.content)
+        # Also try to extract from the APIError itself
+        elif hasattr(e, 'response'):
+            try:
+                error_details["http_status"] = e.response.get('code', 'unknown')
+                error_details["content"] = str(e.response)
+            except:
+                pass
+        logger.error(f"DEBUG – Write access error details: {error_details}")
+        return error_details
     except Exception as e:
-        logger.warning(f"Unexpected error during write access check: {str(e)}")
-        return False
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Capture full exception details
+        logger.warning(f"Unexpected error during write access check: {str(e)}", exc_info=True)
+        import traceback
+        return {
+            "ok": False,
+            "exception_type": type(e).__name__,
+            "error_str": str(e),
+            "traceback": traceback.format_exc()
+        }
     except gspread.exceptions.APIError as e:
         logger.error(f"Google API error accessing sheet: {str(e)}", exc_info=True)
         raise

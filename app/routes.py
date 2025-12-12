@@ -66,22 +66,37 @@ def set_sheet():
         logger.info(f"Sheet opened successfully, checking write access...")
         
         # Explicitly verify write access to surface read-only issues upfront
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Get structured error details instead of bool
         try:
-            write_ok = check_write_access(ws)
-            logger.info(f"Write access check result: {write_ok}")
+            write_result = check_write_access(ws)
+            logger.info(f"Write access check result: {write_result}")
         except Exception as e:
             logger.warning(f"Write access check threw exception: {str(e)}", exc_info=True)
-            write_ok = False
+            write_result = {"ok": False, "exception_type": type(e).__name__, "error_str": str(e)}
         
-        if not write_ok:
-            msg = 'Connected to the sheet, but it appears read-only. '
-            if user_email and user_email != 'unknown':
-                msg += f"Please share the sheet with Editor access to {user_email}. "
-            else:
-                msg += 'Please share the sheet with Editor access to your logged-in Google account. '
-            msg += 'Then try connecting again.'
-            logger.warning(f"Sheet is read-only: {sheet_id}")
-            flash(msg, 'error')
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Surface detailed diagnostics to UI
+        if not write_result.get("ok"):
+            diagnostic_lines = [
+                "Write Access Check Failed",
+                "",
+                f"Logged-in account: {user_email}",
+                f"Sheet ID: {sheet_id}",
+                f"Exception type: {write_result.get('exception_type', 'unknown')}",
+            ]
+            if "http_status" in write_result:
+                diagnostic_lines.append(f"HTTP status: {write_result['http_status']}")
+            if "http_reason" in write_result:
+                diagnostic_lines.append(f"HTTP reason: {write_result['http_reason']}")
+            if "content" in write_result:
+                diagnostic_lines.append(f"Google API response: {write_result['content'][:500]}")
+            if "error_str" in write_result:
+                diagnostic_lines.append(f"Error: {write_result['error_str']}")
+            if "traceback" in write_result:
+                diagnostic_lines.append(f"Traceback: {write_result['traceback'][:500]}")
+            
+            diagnostic_msg = "\n".join(diagnostic_lines)
+            logger.error(f"DEBUG – FULL DIAGNOSTICS:\n{diagnostic_msg}")
+            flash(diagnostic_msg, 'error')
             return redirect(url_for('main.index'))
         
         # Store in session
