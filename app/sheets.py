@@ -145,7 +145,12 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         logger.info(f"Opening spreadsheet: {sheet_id}")
         
         # Open spreadsheet by ID using OAuth user credentials
-        sh = client.open_by_key(sheet_id)
+        try:
+            sh = client.open_by_key(sheet_id)
+        except Exception as e:
+            # TEMP DEBUG: Log exact exception type + message from gspread.open_by_key
+            logger.error(f"TEMP DEBUG – gspread.open_by_key error: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
         ws = sh.sheet1
         
         # Ensure header row exists

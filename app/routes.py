@@ -55,8 +55,43 @@ def set_sheet():
             flash("Session expired. Please log in again.", 'error')
             return redirect(url_for('auth.login'))
         
+        # TEMP DEBUG: Log credential state before attempting to open
+        try:
+            from datetime import datetime
+            from google.oauth2.credentials import Credentials
+            import google.auth.transport.requests as gar
+
+            expiry = None
+            if credentials_dict and credentials_dict.get('expiry'):
+                expiry = datetime.fromisoformat(credentials_dict['expiry'])
+
+            creds = Credentials(
+                token=credentials_dict['token'],
+                refresh_token=credentials_dict.get('refresh_token'),
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=credentials_dict['client_id'],
+                client_secret=credentials_dict['client_secret'],
+                scopes=credentials_dict.get('scopes', []),
+                expiry=expiry
+            )
+            logger.info(f"TEMP DEBUG – creds.scopes: {creds.scopes}")
+            logger.info(f"TEMP DEBUG – creds.valid: {creds.valid}")
+            logger.info(f"TEMP DEBUG – creds.expired: {creds.expired}")
+            logger.info(f"TEMP DEBUG – has refresh_token: {bool(creds.refresh_token)}")
+        except Exception as cred_debug_err:
+            logger.warning(f"TEMP DEBUG – Failed to build creds for logging: {type(cred_debug_err).__name__}: {cred_debug_err}")
+
+        logger.info(f"TEMP DEBUG – sheet_id to open: {sheet_id}")
         logger.info(f"Attempting to connect to sheet: {sheet_id} (user: {user_email})")
-        ws = get_worksheet(sheet_id, credentials_dict)
+
+        # Attempt to get worksheet, with extra logging around open_by_key
+        try:
+            ws = get_worksheet(sheet_id, credentials_dict)
+        except Exception as e:
+            # Surface exact exception type and message from open_by_key path
+            logger.error(f"TEMP DEBUG – open_by_key failed: {type(e).__name__}: {str(e)}", exc_info=True)
+            # Re-raise to go through existing error handling below
+            raise
         logger.info(f"Sheet opened successfully, checking write access...")
         
         # Explicitly verify write access to surface read-only issues upfront
