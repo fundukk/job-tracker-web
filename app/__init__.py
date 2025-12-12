@@ -33,8 +33,9 @@ def create_app():
     
     # Log OAuth config status
     client_id_prefix = os.environ.get('GOOGLE_CLIENT_ID', '')[:20]
+    callback_url = os.environ.get('GOOGLE_CALLBACK_URL', 'https://job-tracker-web.onrender.com/auth/google/callback')
     test_users_count = len([e for e in os.environ.get('GOOGLE_TEST_USERS', '').split(',') if e.strip()])
-    print(f"OAuth Config - Client ID prefix: {client_id_prefix}..., Test users: {test_users_count}")
+    print(f"OAuth Config - Client ID prefix: {client_id_prefix}..., Callback URL: {callback_url}, Test users: {test_users_count}")
     
     # Create Flask app instance
     app = Flask(__name__,
