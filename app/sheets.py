@@ -172,32 +172,64 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
     except gspread.exceptions.SpreadsheetNotFound:
         logger.error(f"Spreadsheet not found: {sheet_url_or_id}")
         raise
-    except gspread.exceptions.APIError as e:
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Extract Google error details
-        logger.error(f"Google API error accessing sheet: {str(e)}", exc_info=True)
+    except (gspread.exceptions.APIError, PermissionError) as e:
+        # Generate unique debug ID for correlation
+        import uuid
+        debug_id = str(uuid.uuid4())[:8]
+        
+        # Extract comprehensive diagnostic information
         error_info = {
+            "debug_id": debug_id,
             "exception_type": type(e).__name__,
-            "error_str": str(e)
+            "error_str": str(e),
+            "sheet_id": sheet_id
         }
-        if HttpError and isinstance(e, HttpError):
-            error_info["http_status"] = e.resp.status
-            error_info["http_reason"] = e.resp.reason
+        
+        # Extract HTTP status and response from gspread APIError
+        if hasattr(e, 'response') and e.response is not None:
+            error_info["http_status"] = e.response.status_code if hasattr(e.response, 'status_code') else 'unknown'
             try:
-                error_info["content"] = e.content.decode('utf-8')
-                logger.error(f"DEBUG – Error content: {error_info['content']}")
+                error_info["response_text"] = e.response.text if hasattr(e.response, 'text') else str(e.response)
             except:
-                error_info["content"] = str(e.content)
-                logger.error(f"DEBUG – Error content (raw): {e.content}")
-            logger.error(f"DEBUG – HTTP status code: {error_info['http_status']}")
-            logger.error(f"DEBUG – HTTP reason: {error_info['http_reason']}")
-        # Try to extract from gspread APIError response
-        if hasattr(e, 'response'):
+                error_info["response_text"] = str(e.response)
+        
+        # Get current OAuth scopes from credentials
+        if credentials_dict:
+            error_info["oauth_scopes"] = credentials_dict.get('scopes', [])
+            error_info["has_refresh_token"] = bool(credentials_dict.get('refresh_token'))
+            # Reconstruct creds to check validity
             try:
-                error_info["response"] = str(e.response)
-                logger.error(f"DEBUG – APIError response: {error_info['response']}")
+                from app.auth import credentials_from_dict
+                creds = credentials_from_dict(credentials_dict)
+                error_info["creds_valid"] = creds.valid
+                error_info["creds_expired"] = creds.expired
             except:
                 pass
-        # Re-raise with attached error_info for route to catch
+        
+        # Get client_id from environment
+        import os
+        error_info["client_id"] = os.environ.get('GOOGLE_CLIENT_ID', 'NOT_SET')
+        
+        # Log comprehensive diagnostics
+        logger.error(f"\n{'='*80}")
+        logger.error(f"SHEETS API ERROR - Debug ID: {debug_id}")
+        logger.error(f"{'='*80}")
+        logger.error(f"Exception Type: {error_info['exception_type']}")
+        logger.error(f"Error Message: {error_info['error_str']}")
+        logger.error(f"Sheet ID: {error_info['sheet_id']}")
+        if 'http_status' in error_info:
+            logger.error(f"HTTP Status Code: {error_info['http_status']}")
+        if 'response_text' in error_info:
+            logger.error(f"Response Body: {error_info['response_text'][:1000]}")
+        if 'oauth_scopes' in error_info:
+            logger.error(f"OAuth Scopes: {error_info['oauth_scopes']}")
+            logger.error(f"Has Refresh Token: {error_info.get('has_refresh_token', False)}")
+            logger.error(f"Credentials Valid: {error_info.get('creds_valid', 'unknown')}")
+            logger.error(f"Credentials Expired: {error_info.get('creds_expired', 'unknown')}")
+        logger.error(f"Client ID: {error_info['client_id'][:20]}..." if len(error_info.get('client_id', '')) > 20 else f"Client ID: {error_info['client_id']}")
+        logger.error(f"{'='*80}\n")
+        
+        # Attach error_info for route to catch
         e.error_info = error_info
         raise
     except Exception as e:
@@ -216,64 +248,96 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         raise
 
 
-def check_write_access(ws) -> dict:
+def check_write_access(ws, credentials_dict=None) -> dict:
     """
     Verify that the current user has write access to the worksheet.
 
     Performs a minimal no-op update (writes the same value back) to avoid
     modifying content while still exercising write permissions.
 
+    Args:
+        ws: gspread.Worksheet instance
+        credentials_dict: Optional credentials dict for enhanced diagnostics
+
     Returns:
         dict: {"ok": True} if write succeeds, 
-              {"ok": False, "http_status": int, "content": str, "exception_type": str} on error
+              {"ok": False, "debug_id": str, ...diagnostic fields} on error
     """
-    # DEBUG – REMOVE AFTER DIAGNOSIS: Return structured error instead of bool
     try:
         # Read existing value from header cell and write it back
         val = ws.cell(1, 1).value or ""
         ws.update_cell(1, 1, val)
         return {"ok": True}
-    except gspread.exceptions.APIError as e:
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Extract detailed Google API error
-        logger.warning(f"Write access check failed: {str(e)}", exc_info=True)
+    except (gspread.exceptions.APIError, PermissionError) as e:
+        # Generate unique debug ID for correlation
+        import uuid
+        debug_id = str(uuid.uuid4())[:8]
+        
+        # Extract comprehensive diagnostic information
         error_details = {
             "ok": False,
+            "debug_id": debug_id,
             "exception_type": type(e).__name__,
             "error_str": str(e)
         }
-        # Try to extract HTTP error details if available
-        if HttpError and isinstance(e, HttpError):
-            error_details["http_status"] = e.resp.status
-            error_details["http_reason"] = e.resp.reason
+        
+        # Extract HTTP status and response from gspread APIError
+        if hasattr(e, 'response') and e.response is not None:
+            error_details["http_status"] = e.response.status_code if hasattr(e.response, 'status_code') else 'unknown'
             try:
-                error_details["content"] = e.content.decode("utf-8", "ignore")
+                error_details["response_text"] = e.response.text if hasattr(e.response, 'text') else str(e.response)
             except:
-                error_details["content"] = str(e.content)
-        # Also try to extract from the APIError itself
-        elif hasattr(e, 'response'):
+                error_details["response_text"] = str(e.response)
+        
+        # Get current OAuth scopes from credentials
+        if credentials_dict:
+            error_details["oauth_scopes"] = credentials_dict.get('scopes', [])
+            error_details["has_refresh_token"] = bool(credentials_dict.get('refresh_token'))
+            # Reconstruct creds to check validity
             try:
-                error_details["http_status"] = e.response.get('code', 'unknown')
-                error_details["content"] = str(e.response)
+                from app.auth import credentials_from_dict
+                creds = credentials_from_dict(credentials_dict)
+                error_details["creds_valid"] = creds.valid
+                error_details["creds_expired"] = creds.expired
             except:
                 pass
-        logger.error(f"DEBUG – Write access error details: {error_details}")
+        
+        # Get client_id from environment
+        import os
+        error_details["client_id"] = os.environ.get('GOOGLE_CLIENT_ID', 'NOT_SET')
+        
+        # Log comprehensive diagnostics
+        logger.warning(f"\\n{'='*80}")
+        logger.warning(f"WRITE ACCESS CHECK FAILED - Debug ID: {debug_id}")
+        logger.warning(f"{'='*80}")
+        logger.warning(f"Exception Type: {error_details['exception_type']}")
+        logger.warning(f"Error Message: {error_details['error_str']}")
+        if 'http_status' in error_details:
+            logger.warning(f"HTTP Status Code: {error_details['http_status']}")
+        if 'response_text' in error_details:
+            logger.warning(f"Response Body: {error_details['response_text'][:1000]}")
+        if 'oauth_scopes' in error_details:
+            logger.warning(f"OAuth Scopes: {error_details['oauth_scopes']}")
+            logger.warning(f"Has Refresh Token: {error_details.get('has_refresh_token', False)}")
+            logger.warning(f"Credentials Valid: {error_details.get('creds_valid', 'unknown')}")
+            logger.warning(f"Credentials Expired: {error_details.get('creds_expired', 'unknown')}")
+        logger.warning(f"Client ID: {error_details['client_id'][:20]}..." if len(error_details.get('client_id', '')) > 20 else f"Client ID: {error_details['client_id']}")
+        logger.warning(f"{'='*80}\\n")
+        
         return error_details
     except Exception as e:
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Capture full exception details
+        # Generic exception handler for unexpected errors
+        import uuid, traceback
+        debug_id = str(uuid.uuid4())[:8]
+        
         logger.warning(f"Unexpected error during write access check: {str(e)}", exc_info=True)
-        import traceback
         return {
             "ok": False,
+            "debug_id": debug_id,
             "exception_type": type(e).__name__,
             "error_str": str(e),
             "traceback": traceback.format_exc()
         }
-    except gspread.exceptions.APIError as e:
-        logger.error(f"Google API error accessing sheet: {str(e)}", exc_info=True)
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error opening worksheet: {str(e)}", exc_info=True)
-        raise
 
 
 def append_job_row(ws, job_data: dict):

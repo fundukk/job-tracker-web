@@ -77,37 +77,28 @@ def set_sheet():
         logger.info(f"Sheet opened successfully, checking write access...")
         
         # Explicitly verify write access to surface read-only issues upfront
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Get structured error details instead of bool
-        try:
-            write_result = check_write_access(ws)
-            logger.info(f"Write access check result: {write_result}")
-        except Exception as e:
-            logger.warning(f"Write access check threw exception: {str(e)}", exc_info=True)
-            write_result = {"ok": False, "exception_type": type(e).__name__, "error_str": str(e)}
+        write_result = check_write_access(ws, credentials_dict)
+        logger.info(f"Write access check result: {write_result}")
         
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Surface detailed diagnostics to UI
+        # Handle write access errors with user-friendly messages
         if not write_result.get("ok"):
-            diagnostic_lines = [
-                "Write Access Check Failed",
-                "",
-                f"Logged-in account: {user_email}",
-                f"Sheet ID: {sheet_id}",
-                f"Exception type: {write_result.get('exception_type', 'unknown')}",
-            ]
-            if "http_status" in write_result:
-                diagnostic_lines.append(f"HTTP status: {write_result['http_status']}")
-            if "http_reason" in write_result:
-                diagnostic_lines.append(f"HTTP reason: {write_result['http_reason']}")
-            if "content" in write_result:
-                diagnostic_lines.append(f"Google API response: {write_result['content'][:500]}")
-            if "error_str" in write_result:
-                diagnostic_lines.append(f"Error: {write_result['error_str']}")
-            if "traceback" in write_result:
-                diagnostic_lines.append(f"Traceback: {write_result['traceback'][:500]}")
+            debug_id = write_result.get('debug_id', 'N/A')
+            user_message = f"Sheet found but write access denied.\\n\\nDebug ID: {debug_id}\\n\\n"
             
-            diagnostic_msg = "\n".join(diagnostic_lines)
-            logger.error(f"DEBUG – FULL DIAGNOSTICS:\n{diagnostic_msg}")
-            flash(diagnostic_msg, 'error')
+            # Provide user-friendly interpretation
+            response_text = write_result.get('response_text', '').lower()
+            http_status = write_result.get('http_status', '')
+            
+            if http_status == 403 or 'permission' in write_result.get('error_str', '').lower():
+                user_message += "Issue: You don't have Editor access to this sheet.\\n"
+                user_message += f"Make sure you gave '{user_email}' Editor access (not Viewer)."
+            elif 'insufficient' in response_text or 'scope' in response_text:
+                user_message += "Issue: Insufficient OAuth permissions.\\n"
+                user_message += "Please log out and log in again to grant all required permissions."
+            else:
+                user_message += f"Error: {write_result.get('error_str', 'Unknown error')[:200]}"
+            
+            flash(user_message, 'error')
             return redirect(url_for('main.index'))
         
         # Store in session
@@ -117,42 +108,57 @@ def set_sheet():
         return redirect(url_for('main.job'))
     
     except Exception as e:
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Surface raw Google error instead of generic message
         logger.error(f"Failed to connect to Google Sheet: {str(e)}", exc_info=True)
         
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Extract error_info if attached
+        # Extract error_info if attached by sheets.py
         error_info = getattr(e, 'error_info', None)
         
-        diagnostic_lines = [
-            "Connection Error",
-            "",
-            f"Logged-in account: {session.get('user_email', 'unknown')}",
-            f"Sheet ID: {sheet_id}",
-            f"Exception type: {type(e).__name__}",
-            f"Error: {str(e)}",
-        ]
+        if error_info and 'debug_id' in error_info:
+            # We have comprehensive diagnostics - show user a short message with debug_id
+            debug_id = error_info['debug_id']
+            user_message = f"Could not connect to your Google Sheet.\n\nDebug ID: {debug_id}\n\n"
+            
+            # Provide user-friendly interpretation of common errors
+            response_text = error_info.get('response_text', '').lower()
+            http_status = error_info.get('http_status', '')
+            
+            if 'accessnotconfigured' in response_text or 'api has not been used' in response_text:
+                user_message += "Issue: Google Sheets/Drive API not enabled for this project.\n"
+                user_message += "This is a configuration issue on the app side."
+            elif http_status == 403 or 'permission' in str(e).lower():
+                user_message += "Issue: Permission denied.\n"
+                user_message += f"Make sure you gave '{session.get('user_email', 'your account')}' Editor access to the sheet."
+            elif http_status == 404 or 'not found' in str(e).lower():
+                user_message += "Issue: Sheet not found.\n"
+                user_message += "Check that the URL/ID is correct and the sheet exists."
+            elif 'insufficient' in response_text or 'scope' in response_text:
+                user_message += "Issue: Insufficient OAuth permissions.\n"
+                user_message += "Please log out and log in again to grant all required permissions."
+            else:
+                user_message += f"Error: {str(e)[:200]}"
+            
+            flash(user_message, 'error')
+        else:
+            # Fallback for errors without detailed diagnostics
+            diagnostic_lines = [
+                "Connection Error",
+                "",
+                f"Logged-in account: {session.get('user_email', 'unknown')}",
+                f"Sheet ID: {sheet_id}",
+                f"Exception type: {type(e).__name__}",
+                f"Error: {str(e)}",
+            ]
+            
+            if error_info:
+                if "traceback" in error_info:
+                    diagnostic_lines.append("")
+                    diagnostic_lines.append("Traceback:")
+                    diagnostic_lines.append(error_info['traceback'][:800])
+            
+            diagnostic_msg = "\n".join(diagnostic_lines)
+            logger.error(f"DEBUG – FULL DIAGNOSTICS:\n{diagnostic_msg}")
+            flash(diagnostic_msg, 'error')
         
-        if error_info:
-            if "http_status" in error_info:
-                diagnostic_lines.append(f"HTTP status: {error_info['http_status']}")
-            if "http_reason" in error_info:
-                diagnostic_lines.append(f"HTTP reason: {error_info['http_reason']}")
-            if "content" in error_info:
-                diagnostic_lines.append("")
-                diagnostic_lines.append("Google API Response:")
-                diagnostic_lines.append(error_info['content'][:1000])
-            if "response" in error_info:
-                diagnostic_lines.append("")
-                diagnostic_lines.append("APIError Response:")
-                diagnostic_lines.append(error_info['response'][:500])
-            if "traceback" in error_info:
-                diagnostic_lines.append("")
-                diagnostic_lines.append("Traceback:")
-                diagnostic_lines.append(error_info['traceback'][:800])
-        
-        diagnostic_msg = "\n".join(diagnostic_lines)
-        logger.error(f"DEBUG – FULL DIAGNOSTICS:\n{diagnostic_msg}")
-        flash(diagnostic_msg, 'error')
         return redirect(url_for('main.index'))
 
 
