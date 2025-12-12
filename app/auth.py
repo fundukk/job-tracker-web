@@ -231,10 +231,16 @@ def login():
     # Otherwise, initiate OAuth flow
     try:
         flow = get_oauth_flow()
+        
+        # Force full consent screen with all scopes
+        # - prompt="consent": Always show consent screen (forces re-authorization)
+        # - access_type="offline": Request refresh_token for offline access
+        # - include_granted_scopes="false": Only request scopes in SCOPES list,
+        #   don't merge with previously granted scopes (ensures Drive scope is requested)
         authorization_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'  # Force consent screen to get refresh token
+            prompt="consent",
+            access_type="offline",
+            include_granted_scopes="false"
         )
         
         # Store state in session for verification
