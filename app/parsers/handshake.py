@@ -149,7 +149,8 @@ def parse_text(text: str, job_url: str) -> dict:
     remote_hint = ""
     
     lines = [line.strip() for line in text.split('\n') if line.strip()]
-    text_lower = text.lower()
+    cleaned_text = "\n".join(lines)
+    text_lower = cleaned_text.lower()
     
     # Noise patterns to skip
     noise_patterns = [
@@ -180,8 +181,43 @@ def parse_text(text: str, job_url: str) -> dict:
         line_lower = line.lower().strip()
         if line_lower.isdigit():
             return True
+        # Treat generic 'logo' lines as noise
+        if ' logo' in line_lower or line_lower.endswith('logo'):
+            return True
         return any(re.match(pattern, line_lower, re.IGNORECASE) for pattern in noise_patterns)
     
+    # First, handle explicitly labeled blocks deterministically
+    labels_map = {}
+    i = 0
+    while i < len(lines):
+        key = lines[i].strip().lower()
+        if key in {"position", "company", "location", "salary", "jobtype", "job type", "employment type"}:
+            val = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            labels_map[key] = val
+            i += 2
+            continue
+        i += 1
+
+    if labels_map:
+        # Assign from labels when present
+        pos_val = labels_map.get("position")
+        if pos_val:
+            position = pos_val
+        comp_val = labels_map.get("company")
+        if comp_val:
+            company = comp_val
+        loc_val = labels_map.get("location")
+        if loc_val:
+            # Normalize to City, ST
+            m = re.search(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})', loc_val)
+            location = m.group(1) if m else loc_val
+        sal_val = labels_map.get("salary")
+        if sal_val:
+            salary = sal_val
+        jt_val = labels_map.get("jobtype") or labels_map.get("job type") or labels_map.get("employment type")
+        if jt_val:
+            job_type = jt_val
+
     # Look for "Company logo" pattern to extract company name
     logo_line_idx = -1
     for i, line in enumerate(lines):
@@ -196,9 +232,10 @@ def parse_text(text: str, job_url: str) -> dict:
             break
     
     # If we found a logo line, position is usually the SECOND meaningful line after logo
+    city_state_pattern = r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2}$'
+
     if logo_line_idx >= 0 and not position:
         start_idx = logo_line_idx + 1
-        seen_first_text = False
         
         for i in range(start_idx, min(start_idx + 8, len(lines))):
             line = lines[i].strip()
@@ -210,13 +247,11 @@ def parse_text(text: str, job_url: str) -> dict:
             if company and lower == company.lower():
                 continue
             
-            if is_noise(line) or len(line) <= 3 or line.isupper():
+            # Skip noise, short lines, all-caps, and location pattern
+            if is_noise(line) or len(line) <= 3 or line.isupper() or re.match(city_state_pattern, line):
                 continue
             
-            if not seen_first_text:
-                seen_first_text = True
-                continue
-            
+            # First meaningful non-company, non-location line is the title
             position = line
             logger.debug(f"Extracted position from text: {position}")
             break
@@ -242,8 +277,14 @@ def parse_text(text: str, job_url: str) -> dict:
                 i += 2
                 continue
         
-        elif line_lower == "location" and i + 1 < len(lines):
-            location = lines[i + 1].strip()
+        elif line_lower == "location":
+            # Search forward for City, ST pattern in the remaining text
+            remaining = "\n".join(lines[i + 1:])
+            locm = re.search(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})', remaining)
+            if locm:
+                location = locm.group(1)
+            else:
+                location = lines[i + 1].strip() if i + 1 < len(lines) else ""
             logger.debug(f"Extracted location from labeled field: {location}")
             i += 2
             continue
@@ -274,23 +315,31 @@ def parse_text(text: str, job_url: str) -> dict:
         skip_keywords = {"profile", "view", "follow"}
         meaningful_lines = []
         
+        title_keywords = {"engineer", "developer", "manager", "analyst", "scientist", "designer", "architect", "specialist"}
         for line in lines:
             if (not is_noise(line) 
                 and line.lower() not in label_words 
                 and len(line) > 5
                 and not any(kw in line.lower() for kw in skip_keywords)
-                and not re.match(r'^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2}$', line)):
+                and not re.match(city_state_pattern, line)
+                and 'logo' not in line.lower()):
                 meaningful_lines.append(line)
         
         if not position and meaningful_lines:
-            position = meaningful_lines[0]
+            # Prefer lines that look like titles based on keywords
+            preferred = [
+                l for l in meaningful_lines
+                if any(k in l.lower() for k in title_keywords)
+                and not re.match(r"^(internship|full[-\s]?time|part[-\s]?time|contract)$", l.lower())
+            ]
+            position = (preferred[0] if preferred else meaningful_lines[0])
             logger.debug(f"Extracted position from meaningful lines: {position}")
         
         if not company and len(meaningful_lines) > 1:
             company = meaningful_lines[1]
             logger.debug(f"Extracted company from meaningful lines: {company}")
     
-    # Fallback: Location pattern matching
+    # Fallback: Location pattern matching from full text
     if not location:
         loc_match = re.search(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})', text)
         if loc_match:
@@ -329,6 +378,12 @@ def parse_text(text: str, job_url: str) -> dict:
         logger.debug(f"Detected job type: {job_type}")
     
     logger.info(f"Parsed Handshake text: {position} at {company}")
+    # Normalize location to City, ST using either current value or full text
+    loc_norm = re.search(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})', location or "")
+    if not loc_norm:
+        loc_norm = re.search(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z]{2})', cleaned_text)
+    if loc_norm:
+        location = loc_norm.group(1)
     
     return {
         "date_added": date.today().isoformat(),

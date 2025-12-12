@@ -7,11 +7,12 @@ import logging
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from app.auth import require_oauth
 from app.sheets import (
-    get_worksheet, 
-    append_job_row, 
-    replace_last_job, 
+    get_worksheet,
+    append_job_row,
+    replace_last_job,
     extract_spreadsheet_id,
-    find_job_by_link
+    find_job_by_link,
+    check_write_access,
 )
 from app.parsers import process_job_url, validate_job_url, parse_handshake_text_wrapper
 from core.salary import normalize_salary
@@ -51,6 +52,17 @@ def set_sheet():
         
         logger.info(f"Attempting to connect to sheet: {sheet_id}")
         ws = get_worksheet(sheet_id, credentials_dict)
+        # Explicitly verify write access to surface read-only issues upfront
+        if not check_write_access(ws):
+            user_email = session.get('user_email')
+            msg = 'Connected to the sheet, but it appears read-only. '
+            if user_email:
+                msg += f"Please share the sheet with Editor access to {user_email}. "
+            else:
+                msg += 'Please share the sheet with Editor access to your logged-in Google account. '
+            msg += 'Then try connecting again.'
+            flash(msg, 'error')
+            return redirect(url_for('main.index'))
         
         # Store in session
         session['sheet_url'] = sheet_id
@@ -60,11 +72,14 @@ def set_sheet():
     
     except Exception as e:
         logger.error(f"Failed to connect to Google Sheet: {str(e)}", exc_info=True)
-        flash(
-            'Could not connect to your Google Sheet. '
-            'Please make sure the Sheet is shared with your Google account and try logging in again.',
-            'error'
-        )
+        user_email = session.get('user_email')
+        msg = 'Could not connect to your Google Sheet. '
+        if user_email:
+            msg += f"Ensure the sheet is shared with Editor access to {user_email}. "
+        else:
+            msg += 'Ensure the sheet is shared with your Google account. '
+        msg += 'If needed, log out and sign in with the correct account.'
+        flash(msg, 'error')
         return redirect(url_for('main.index'))
 
 

@@ -138,6 +138,30 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
     except gspread.exceptions.SpreadsheetNotFound:
         logger.error(f"Spreadsheet not found: {sheet_url_or_id}")
         raise
+
+
+def check_write_access(ws) -> bool:
+    """
+    Verify that the current user has write access to the worksheet.
+
+    Performs a minimal no-op update (writes the same value back) to avoid
+    modifying content while still exercising write permissions.
+
+    Returns:
+        bool: True if write succeeds, False if forbidden or fails.
+    """
+    try:
+        # Read existing value from header cell and write it back
+        val = ws.cell(1, 1).value or ""
+        ws.update_cell(1, 1, val)
+        return True
+    except gspread.exceptions.APIError as e:
+        # 403 typically indicates insufficient permissions
+        logger.warning(f"Write access check failed: {str(e)}")
+        return False
+    except Exception as e:
+        logger.warning(f"Unexpected error during write access check: {str(e)}")
+        return False
     except gspread.exceptions.APIError as e:
         logger.error(f"Google API error accessing sheet: {str(e)}", exc_info=True)
         raise

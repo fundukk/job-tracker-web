@@ -247,6 +247,22 @@ def oauth2callback():
         # Store credentials in session
         credentials = flow.credentials
         session['credentials'] = credentials_to_dict(credentials)
+
+        # Fetch and store basic user info (email) for clearer guidance
+        try:
+            import requests
+            resp = requests.get(
+                'https://www.googleapis.com/oauth2/v2/userinfo',
+                headers={'Authorization': f'Bearer {credentials.token}'},
+                timeout=5
+            )
+            if resp.ok:
+                data = resp.json()
+                session['user_email'] = data.get('email')
+            else:
+                logger.warning(f"Failed to fetch userinfo: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.warning(f"Error fetching userinfo: {str(e)}")
         
         logger.info("User successfully authenticated with Google OAuth")
         flash('Successfully logged in with Google!', 'success')
