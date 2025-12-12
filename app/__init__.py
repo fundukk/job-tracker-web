@@ -32,7 +32,7 @@ def create_app():
         )
     
     # Log OAuth config status
-    client_id_prefix = os.environ.get('GOOGLE_CLIENT_ID', '')[:20]
+    client_id_prefix = os.environ.get('GOOGLE_CLIENT_ID', '')[:8]
     callback_url = os.environ.get('GOOGLE_CALLBACK_URL', '')
     test_users_count = len([e for e in os.environ.get('GOOGLE_TEST_USERS', '').split(',') if e.strip()])
     print(f"OAuth Config - Client ID prefix: {client_id_prefix}..., Callback URL: {callback_url}, Test users: {test_users_count}")
@@ -56,6 +56,21 @@ def create_app():
     
     # Register blueprints
     register_blueprints(app)
+    
+    # Strict startup verification: callback URL and registered route
+    expected_callback = 'https://job-tracker-web.onrender.com/auth/google/callback'
+    if callback_url != expected_callback:
+        raise RuntimeError(
+            f"OAuth callback URL mismatch. Expected '{expected_callback}', got '{callback_url}'. "
+            "Update GOOGLE_CALLBACK_URL to match Google Cloud OAuth configuration."
+        )
+    # Log the actual Flask route registered for Google OAuth callback
+    try:
+        routes = [str(r) for r in app.url_map.iter_rules() if r.rule.endswith('/auth/google/callback')]
+        app.logger.info(f"OAuth callback route(s) registered: {routes}")
+        print(f"OAuth callback route(s) registered: {routes}")
+    except Exception as route_err:
+        app.logger.warning(f"Failed to list OAuth callback routes: {route_err}")
     
     # Register error handlers
     register_error_handlers(app)
