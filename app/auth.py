@@ -113,14 +113,26 @@ def credentials_from_dict(credentials_dict):
         
     Returns:
         Credentials: google.oauth2.credentials.Credentials object
+        
+    Raises:
+        ValueError: If required credentials fields are missing
     """
     from datetime import datetime
+    
+    # Validate required fields
+    required_fields = ['token', 'token_uri', 'client_id', 'client_secret', 'scopes']
+    missing_fields = [f for f in required_fields if f not in credentials_dict]
+    if missing_fields:
+        raise ValueError(
+            f"OAuth credentials incomplete (missing: {', '.join(missing_fields)}). "
+            "Please log out and sign in again."
+        )
     
     expiry = None
     if credentials_dict.get('expiry'):
         expiry = datetime.fromisoformat(credentials_dict['expiry'])
     
-    return Credentials(
+    credentials = Credentials(
         token=credentials_dict['token'],
         refresh_token=credentials_dict.get('refresh_token'),
         token_uri=credentials_dict['token_uri'],
@@ -129,6 +141,18 @@ def credentials_from_dict(credentials_dict):
         scopes=credentials_dict['scopes'],
         expiry=expiry
     )
+    
+    # Auto-refresh if expired and refresh_token is available
+    if credentials.expired and credentials.refresh_token:
+        try:
+            logger.info("Credentials expired, auto-refreshing with refresh_token")
+            credentials.refresh(Request())
+            logger.info("Credentials refreshed successfully")
+        except Exception as e:
+            logger.warning(f"Failed to auto-refresh credentials: {str(e)}")
+            # Don't raise - let the caller handle expired credentials
+    
+    return credentials
 
 
 def refresh_credentials_if_needed(credentials_dict):

@@ -60,7 +60,13 @@ class TestSheetsHelpers:
         mock_worksheet.row_values.return_value = []  # No headers
         
         # Call function
-        credentials_dict = {'token': 'fake', 'client_id': 'fake'}
+        credentials_dict = {
+            'token': 'fake',
+            'client_id': 'fake',
+            'client_secret': 'fake',
+            'token_uri': 'https://oauth2.googleapis.com/token',
+            'scopes': ['https://www.googleapis.com/auth/spreadsheets']
+        }
         result = get_worksheet("test_sheet_id", credentials_dict)
         
         # Verify header row was inserted

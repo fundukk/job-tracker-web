@@ -50,12 +50,8 @@ def get_gspread_client(credentials_dict):
         raise ValueError("No OAuth credentials found. Please log in with Google first.")
     
     try:
-        # Reconstruct credentials from dictionary
-        from datetime import datetime
-        
-        expiry = None
-        if credentials_dict.get('expiry'):
-            expiry = datetime.fromisoformat(credentials_dict['expiry'])
+        # Import the helper from auth module
+        from app.auth import credentials_from_dict
         
         # GUARD: Log credentials details to confirm per-user usage
         scopes = credentials_dict.get('scopes', [])
@@ -65,15 +61,8 @@ def get_gspread_client(credentials_dict):
         logger.info(f"GUARD – Client ID: {credentials_dict.get('client_id', 'None')}")
         logger.info(f"GUARD – Has refresh_token: {bool(credentials_dict.get('refresh_token'))}")
         
-        credentials = Credentials(
-            token=credentials_dict['token'],
-            refresh_token=credentials_dict.get('refresh_token'),
-            token_uri=credentials_dict['token_uri'],
-            client_id=credentials_dict['client_id'],
-            client_secret=credentials_dict['client_secret'],
-            scopes=credentials_dict['scopes'],
-            expiry=expiry
-        )
+        # Reconstruct credentials using helper (includes validation and auto-refresh)
+        credentials = credentials_from_dict(credentials_dict)
         
         # GUARD: Confirm no global/cached client is being reused
         logger.info(f"GUARD – Creating NEW gspread client (not cached)")
@@ -83,6 +72,10 @@ def get_gspread_client(credentials_dict):
         logger.info(f"GUARD – Successfully authorized NEW gspread client for this request")
         return client
     
+    except ValueError as e:
+        # credentials_from_dict raises ValueError for incomplete credentials
+        logger.error(f"Invalid or incomplete credentials: {str(e)}")
+        raise
     except KeyError as e:
         logger.error(f"Invalid credentials dictionary, missing key: {e}")
         raise ValueError(f"Invalid credentials format: missing {e}")
@@ -137,32 +130,27 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         sheet_id = extract_spreadsheet_id(sheet_url_or_id)
         
         # DEBUG – REMOVE AFTER DIAGNOSIS: Verify credentials before open_by_key
-        from datetime import datetime
         if credentials_dict:
+            # Import helper for validation
+            from app.auth import credentials_from_dict
+            
             scopes = credentials_dict.get('scopes', [])
-            expiry_str = credentials_dict.get('expiry')
-            expiry = datetime.fromisoformat(expiry_str) if expiry_str else None
             has_refresh = bool(credentials_dict.get('refresh_token'))
             
             # Only validate if we have the required fields (skip for test mocks)
             if all(k in credentials_dict for k in ['token', 'token_uri', 'client_id', 'client_secret']):
-                # Reconstruct credentials to check validity
-                creds = Credentials(
-                    token=credentials_dict['token'],
-                    refresh_token=credentials_dict.get('refresh_token'),
-                    token_uri=credentials_dict['token_uri'],
-                    client_id=credentials_dict['client_id'],
-                    client_secret=credentials_dict['client_secret'],
-                    scopes=credentials_dict.get('scopes', []),
-                    expiry=expiry
-                )
-                
-                logger.info(f"DEBUG – BEFORE open_by_key for sheet {sheet_id}:")
-                logger.info(f"DEBUG – Scopes: {creds.scopes}")
-                logger.info(f"DEBUG – Valid: {creds.valid}")
-                logger.info(f"DEBUG – Expired: {creds.expired}")
-                logger.info(f"DEBUG – Has refresh_token: {has_refresh}")
-                logger.info(f"DEBUG – Token prefix: {credentials_dict.get('token', '')[:20]}...")
+                try:
+                    # Reconstruct credentials to check validity
+                    creds = credentials_from_dict(credentials_dict)
+                    
+                    logger.info(f"DEBUG – BEFORE open_by_key for sheet {sheet_id}:")
+                    logger.info(f"DEBUG – Scopes: {creds.scopes}")
+                    logger.info(f"DEBUG – Valid: {creds.valid}")
+                    logger.info(f"DEBUG – Expired: {creds.expired}")
+                    logger.info(f"DEBUG – Has refresh_token: {has_refresh}")
+                    logger.info(f"DEBUG – Token prefix: {credentials_dict.get('token', '')[:20]}...")
+                except ValueError as e:
+                    logger.warning(f"DEBUG – Credentials validation failed: {str(e)}")
             else:
                 logger.info(f"DEBUG – Using mock credentials for testing")
         
