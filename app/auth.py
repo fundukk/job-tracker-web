@@ -20,6 +20,7 @@ auth_bp = Blueprint('auth', __name__)
 # OAuth 2.0 scopes required for Google Sheets access
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"

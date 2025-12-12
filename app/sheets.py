@@ -7,11 +7,6 @@ import logging
 import gspread
 from datetime import date
 from google.oauth2.credentials import Credentials
-# DEBUG – REMOVE AFTER DIAGNOSIS
-try:
-    from googleapiclient.errors import HttpError
-except ImportError:
-    HttpError = None
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +28,12 @@ COLUMNS = [
 
 def get_gspread_client(credentials_dict):
     """
-    Authorize using OAuth credentials and return a gspread client.
+    Create gspread client using OAuth user credentials from Flask session.
+    
+    Uses the correct pattern for OAuth user credentials (NOT service account):
+    - Build Credentials from session dict
+    - Create gspread.Client with auth=credentials
+    - Set client.session to AuthorizedSession
     
     Args:
         credentials_dict: OAuth credentials from Flask session
@@ -43,44 +43,56 @@ def get_gspread_client(credentials_dict):
         
     Raises:
         ValueError: If credentials_dict is None or invalid
-        gspread.exceptions.GSpreadException: If authorization fails
     """
     if not credentials_dict:
         logger.error("No credentials provided to get_gspread_client")
         raise ValueError("No OAuth credentials found. Please log in with Google first.")
     
     try:
-        # Import the helper from auth module
-        from app.auth import credentials_from_dict
+        import google.auth.transport.requests
+        from datetime import datetime
         
-        # GUARD: Log credentials details to confirm per-user usage
-        scopes = credentials_dict.get('scopes', [])
-        token_prefix = credentials_dict.get('token', '')[:20] if credentials_dict.get('token') else 'None'
-        logger.info(f"GUARD – Creating gspread client with token prefix: {token_prefix}...")
-        logger.info(f"GUARD – Scopes attached: {scopes}")
-        logger.info(f"GUARD – Client ID: {credentials_dict.get('client_id', 'None')}")
-        logger.info(f"GUARD – Has refresh_token: {bool(credentials_dict.get('refresh_token'))}")
+        # Build Credentials object from session dict
+        # This is OAuth USER credentials (not service account)
+        expiry = None
+        if credentials_dict.get('expiry'):
+            expiry = datetime.fromisoformat(credentials_dict['expiry'])
         
-        # Reconstruct credentials using helper (includes validation and auto-refresh)
-        credentials = credentials_from_dict(credentials_dict)
+        credentials = Credentials(
+            token=credentials_dict['token'],
+            refresh_token=credentials_dict.get('refresh_token'),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=credentials_dict['client_id'],
+            client_secret=credentials_dict['client_secret'],
+            scopes=credentials_dict.get('scopes', []),
+            expiry=expiry
+        )
         
-        # GUARD: Confirm no global/cached client is being reused
-        logger.info(f"GUARD – Creating NEW gspread client (not cached)")
+        # Debug logging for credentials state
+        logger.debug(f"OAuth Credentials - scopes: {credentials.scopes}")
+        logger.debug(f"OAuth Credentials - valid: {credentials.valid}")
+        logger.debug(f"OAuth Credentials - expired: {credentials.expired}")
+        logger.debug(f"OAuth Credentials - has refresh_token: {bool(credentials.refresh_token)}")
         
-        # Authorize and return gspread client
-        client = gspread.authorize(credentials)
-        logger.info(f"GUARD – Successfully authorized NEW gspread client for this request")
-        return client
+        # Auto-refresh if expired
+        if credentials.expired and credentials.refresh_token:
+            logger.info("Credentials expired, refreshing...")
+            credentials.refresh(google.auth.transport.requests.Request())
+            logger.info("Credentials refreshed successfully")
+        
+        # Create gspread client with OAuth user credentials
+        # DO NOT use gspread.authorize() - it's for service accounts
+        gc = gspread.Client(auth=credentials)
+        gc.session = google.auth.transport.requests.AuthorizedSession(credentials)
+        
+        logger.info("Created gspread client with OAuth user credentials")
+        return gc
     
-    except ValueError as e:
-        # credentials_from_dict raises ValueError for incomplete credentials
-        logger.error(f"Invalid or incomplete credentials: {str(e)}")
-        raise
     except KeyError as e:
         logger.error(f"Invalid credentials dictionary, missing key: {e}")
         raise ValueError(f"Invalid credentials format: missing {e}")
     except Exception as e:
-        logger.error(f"Failed to authorize gspread client: {str(e)}", exc_info=True)
+        logger.error(f"Failed to create gspread client: {str(e)}", exc_info=True)
         raise
 
 
@@ -126,37 +138,13 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         gspread.exceptions.APIError: If API call fails
     """
     try:
+        # Get gspread client (already creates and validates credentials internally)
         client = get_gspread_client(credentials_dict)
         sheet_id = extract_spreadsheet_id(sheet_url_or_id)
         
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Verify credentials before open_by_key
-        if credentials_dict:
-            # Import helper for validation
-            from app.auth import credentials_from_dict
-            
-            scopes = credentials_dict.get('scopes', [])
-            has_refresh = bool(credentials_dict.get('refresh_token'))
-            
-            # Only validate if we have the required fields (skip for test mocks)
-            if all(k in credentials_dict for k in ['token', 'token_uri', 'client_id', 'client_secret']):
-                try:
-                    # Reconstruct credentials to check validity
-                    creds = credentials_from_dict(credentials_dict)
-                    
-                    logger.info(f"DEBUG – BEFORE open_by_key for sheet {sheet_id}:")
-                    logger.info(f"DEBUG – Scopes: {creds.scopes}")
-                    logger.info(f"DEBUG – Valid: {creds.valid}")
-                    logger.info(f"DEBUG – Expired: {creds.expired}")
-                    logger.info(f"DEBUG – Has refresh_token: {has_refresh}")
-                    logger.info(f"DEBUG – Token prefix: {credentials_dict.get('token', '')[:20]}...")
-                except ValueError as e:
-                    logger.warning(f"DEBUG – Credentials validation failed: {str(e)}")
-            else:
-                logger.info(f"DEBUG – Using mock credentials for testing")
-        
         logger.info(f"Opening spreadsheet: {sheet_id}")
         
-        # Open spreadsheet by ID
+        # Open spreadsheet by ID using OAuth user credentials
         sh = client.open_by_key(sheet_id)
         ws = sh.sheet1
         
@@ -197,10 +185,22 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         if credentials_dict:
             error_info["oauth_scopes"] = credentials_dict.get('scopes', [])
             error_info["has_refresh_token"] = bool(credentials_dict.get('refresh_token'))
-            # Reconstruct creds to check validity
+            # Build credentials to check validity (same pattern as get_gspread_client)
             try:
-                from app.auth import credentials_from_dict
-                creds = credentials_from_dict(credentials_dict)
+                from datetime import datetime
+                expiry = None
+                if credentials_dict.get('expiry'):
+                    expiry = datetime.fromisoformat(credentials_dict['expiry'])
+                
+                creds = Credentials(
+                    token=credentials_dict['token'],
+                    refresh_token=credentials_dict.get('refresh_token'),
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=credentials_dict['client_id'],
+                    client_secret=credentials_dict['client_secret'],
+                    scopes=credentials_dict.get('scopes', []),
+                    expiry=expiry
+                )
                 error_info["creds_valid"] = creds.valid
                 error_info["creds_expired"] = creds.expired
             except:
@@ -234,15 +234,14 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         raise
     except Exception as e:
         logger.error(f"Unexpected error opening worksheet: {str(e)}", exc_info=True)
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Log exception type and attach error info
-        logger.error(f"DEBUG – Exception type: {type(e).__name__}")
         import traceback
         error_info = {
             "exception_type": type(e).__name__,
             "error_str": str(e),
             "traceback": traceback.format_exc()
         }
-        logger.error(f"DEBUG – Full traceback: {error_info['traceback']}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Full traceback: {error_info['traceback']}")
         # Attach error_info for route to catch
         e.error_info = error_info
         raise
@@ -293,10 +292,22 @@ def check_write_access(ws, credentials_dict=None) -> dict:
         if credentials_dict:
             error_details["oauth_scopes"] = credentials_dict.get('scopes', [])
             error_details["has_refresh_token"] = bool(credentials_dict.get('refresh_token'))
-            # Reconstruct creds to check validity
+            # Build credentials to check validity (same pattern as get_gspread_client)
             try:
-                from app.auth import credentials_from_dict
-                creds = credentials_from_dict(credentials_dict)
+                from datetime import datetime
+                expiry = None
+                if credentials_dict.get('expiry'):
+                    expiry = datetime.fromisoformat(credentials_dict['expiry'])
+                
+                creds = Credentials(
+                    token=credentials_dict['token'],
+                    refresh_token=credentials_dict.get('refresh_token'),
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=credentials_dict['client_id'],
+                    client_secret=credentials_dict['client_secret'],
+                    scopes=credentials_dict.get('scopes', []),
+                    expiry=expiry
+                )
                 error_details["creds_valid"] = creds.valid
                 error_details["creds_expired"] = creds.expired
             except:
