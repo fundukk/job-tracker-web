@@ -20,7 +20,6 @@ auth_bp = Blueprint('auth', __name__)
 # OAuth 2.0 scopes required for Google Sheets access
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",  # Required by gspread to open sheets by ID
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid"
@@ -236,7 +235,7 @@ def login():
         # - prompt="consent": Always show consent screen (forces re-authorization)
         # - access_type="offline": Request refresh_token for offline access
         # - include_granted_scopes="false": Only request scopes in SCOPES list,
-        #   don't merge with previously granted scopes (ensures Drive scope is requested)
+        #   don't merge with previously granted scopes
         authorization_url, state = flow.authorization_url(
             prompt="consent",
             access_type="offline",
