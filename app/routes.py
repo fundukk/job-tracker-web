@@ -32,7 +32,7 @@ def index():
         return redirect(url_for('auth.login'))
     
     logger.info("Authenticated user viewing index page")
-    return render_template('index.html')
+    return render_template('index.html', user_email=session.get('user_email'))
 
 
 @main_bp.route('/set_sheet', methods=['POST'])
@@ -49,18 +49,28 @@ def set_sheet():
         # Validate that we can access the sheet with OAuth credentials
         sheet_id = extract_spreadsheet_id(sheet_url)
         credentials_dict = session.get('credentials')
+        user_email = session.get('user_email', 'unknown')
         
-        logger.info(f"Attempting to connect to sheet: {sheet_id}")
+        logger.info(f"Attempting to connect to sheet: {sheet_id} (user: {user_email})")
         ws = get_worksheet(sheet_id, credentials_dict)
+        logger.info(f"Sheet opened successfully, checking write access...")
+        
         # Explicitly verify write access to surface read-only issues upfront
-        if not check_write_access(ws):
-            user_email = session.get('user_email')
+        try:
+            write_ok = check_write_access(ws)
+            logger.info(f"Write access check result: {write_ok}")
+        except Exception as e:
+            logger.warning(f"Write access check threw exception: {str(e)}", exc_info=True)
+            write_ok = False
+        
+        if not write_ok:
             msg = 'Connected to the sheet, but it appears read-only. '
-            if user_email:
+            if user_email and user_email != 'unknown':
                 msg += f"Please share the sheet with Editor access to {user_email}. "
             else:
                 msg += 'Please share the sheet with Editor access to your logged-in Google account. '
             msg += 'Then try connecting again.'
+            logger.warning(f"Sheet is read-only: {sheet_id}")
             flash(msg, 'error')
             return redirect(url_for('main.index'))
         
@@ -72,9 +82,9 @@ def set_sheet():
     
     except Exception as e:
         logger.error(f"Failed to connect to Google Sheet: {str(e)}", exc_info=True)
-        user_email = session.get('user_email')
+        user_email = session.get('user_email', 'unknown')
         msg = 'Could not connect to your Google Sheet. '
-        if user_email:
+        if user_email and user_email != 'unknown':
             msg += f"Ensure the sheet is shared with Editor access to {user_email}. "
         else:
             msg += 'Ensure the sheet is shared with your Google account. '

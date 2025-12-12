@@ -5,6 +5,7 @@ Handles login, logout, and OAuth callback for the job tracker app.
 """
 import os
 import logging
+import requests
 from functools import wraps
 from flask import Blueprint, request, redirect, url_for, session, flash
 from google.oauth2.credentials import Credentials
@@ -247,10 +248,10 @@ def oauth2callback():
         # Store credentials in session
         credentials = flow.credentials
         session['credentials'] = credentials_to_dict(credentials)
+        logger.info("Credentials stored in session")
 
         # Fetch and store basic user info (email) for clearer guidance
         try:
-            import requests
             resp = requests.get(
                 'https://www.googleapis.com/oauth2/v2/userinfo',
                 headers={'Authorization': f'Bearer {credentials.token}'},
@@ -258,11 +259,15 @@ def oauth2callback():
             )
             if resp.ok:
                 data = resp.json()
-                session['user_email'] = data.get('email')
+                email = data.get('email')
+                session['user_email'] = email
+                logger.info(f"User email captured: {email}")
             else:
                 logger.warning(f"Failed to fetch userinfo: {resp.status_code} {resp.text}")
+                logger.warning("Continuing without email; user will not see it in guidance")
         except Exception as e:
             logger.warning(f"Error fetching userinfo: {str(e)}")
+            logger.warning("Continuing without email; user will not see it in guidance")
         
         logger.info("User successfully authenticated with Google OAuth")
         flash('Successfully logged in with Google!', 'success')
