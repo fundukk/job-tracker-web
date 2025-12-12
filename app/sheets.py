@@ -57,6 +57,14 @@ def get_gspread_client(credentials_dict):
         if credentials_dict.get('expiry'):
             expiry = datetime.fromisoformat(credentials_dict['expiry'])
         
+        # GUARD: Log credentials details to confirm per-user usage
+        scopes = credentials_dict.get('scopes', [])
+        token_prefix = credentials_dict.get('token', '')[:20] if credentials_dict.get('token') else 'None'
+        logger.info(f"GUARD – Creating gspread client with token prefix: {token_prefix}...")
+        logger.info(f"GUARD – Scopes attached: {scopes}")
+        logger.info(f"GUARD – Client ID: {credentials_dict.get('client_id', 'None')}")
+        logger.info(f"GUARD – Has refresh_token: {bool(credentials_dict.get('refresh_token'))}")
+        
         credentials = Credentials(
             token=credentials_dict['token'],
             refresh_token=credentials_dict.get('refresh_token'),
@@ -67,9 +75,12 @@ def get_gspread_client(credentials_dict):
             expiry=expiry
         )
         
+        # GUARD: Confirm no global/cached client is being reused
+        logger.info(f"GUARD – Creating NEW gspread client (not cached)")
+        
         # Authorize and return gspread client
         client = gspread.authorize(credentials)
-        logger.debug("Successfully authorized gspread client")
+        logger.info(f"GUARD – Successfully authorized NEW gspread client for this request")
         return client
     
     except KeyError as e:

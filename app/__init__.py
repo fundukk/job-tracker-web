@@ -27,6 +27,12 @@ def create_app():
     # Configure secret key for sessions
     app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
     
+    # GUARD: Ensure sessions are per-user (client-side signed cookies by default in Flask)
+    # Flask's default session type uses signed cookies (per-client, not shared)
+    # No SESSION_TYPE override means we're using secure, per-user sessions
+    app.logger.info("GUARD – Using Flask default session (client-side signed cookies, per-user)")
+    app.logger.info(f"GUARD – Session configured with secret_key (first 10 chars): {app.secret_key[:10]}...")
+    
     # Configure logging
     configure_logging(app)
     

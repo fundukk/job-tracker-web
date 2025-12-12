@@ -54,11 +54,22 @@ def set_sheet():
         credentials_dict = session.get('credentials')
         user_email = session.get('user_email', 'unknown')
         
+        # GUARD: Verify session credentials are present and log details
+        if not credentials_dict:
+            logger.error("GUARD – No credentials in session! User should be redirected to login by @require_oauth")
+            flash("Session expired. Please log in again.", 'error')
+            return redirect(url_for('auth.login'))
+        
+        scopes = credentials_dict.get('scopes', [])
+        token_prefix = credentials_dict.get('token', '')[:20] if credentials_dict.get('token') else 'None'
+        logger.info(f"GUARD – Using session credentials with token prefix: {token_prefix}...")
+        logger.info(f"GUARD – Session scopes: {scopes}")
+        logger.info(f"GUARD – User email from session: {user_email}")
+        
         # DEBUG – REMOVE AFTER DIAGNOSIS: Log diagnostics
         logger.info(f"DEBUG – USER EMAIL: {user_email}")
         logger.info(f"DEBUG – SHEET ID: {sheet_id}")
         if credentials_dict:
-            scopes = credentials_dict.get('scopes', [])
             logger.info(f"DEBUG – OAUTH SCOPES: {scopes}")
         
         logger.info(f"Attempting to connect to sheet: {sheet_id} (user: {user_email})")

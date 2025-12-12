@@ -246,10 +246,22 @@ def oauth2callback():
         
         flow.fetch_token(authorization_response=authorization_response)
         
+        # GUARD: Clear any existing session data before storing new credentials
+        logger.info("GUARD – Clearing existing session before storing new OAuth credentials")
+        session.clear()
+        
         # Store credentials in session
         credentials = flow.credentials
-        session['credentials'] = credentials_to_dict(credentials)
-        logger.info("Credentials stored in session")
+        credentials_dict = credentials_to_dict(credentials)
+        session['credentials'] = credentials_dict
+        
+        # GUARD: Log fresh credentials details
+        scopes = credentials_dict.get('scopes', [])
+        token_prefix = credentials_dict.get('token', '')[:20] if credentials_dict.get('token') else 'None'
+        logger.info(f"GUARD – Stored NEW credentials in session with token prefix: {token_prefix}...")
+        logger.info(f"GUARD – Scopes in new credentials: {scopes}")
+        logger.info(f"GUARD – Has refresh_token: {bool(credentials_dict.get('refresh_token'))}")
+        logger.info("GUARD – Credentials are PER-USER session-based, NOT global or cached")
 
         # Fetch and store basic user info (email) for clearer guidance
         try:
