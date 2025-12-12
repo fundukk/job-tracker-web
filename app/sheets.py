@@ -136,10 +136,35 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         client = get_gspread_client(credentials_dict)
         sheet_id = extract_spreadsheet_id(sheet_url_or_id)
         
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Log credentials scopes
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Verify credentials before open_by_key
+        from datetime import datetime
         if credentials_dict:
             scopes = credentials_dict.get('scopes', [])
-            logger.info(f"DEBUG – OAuth scopes attached: {scopes}")
+            expiry_str = credentials_dict.get('expiry')
+            expiry = datetime.fromisoformat(expiry_str) if expiry_str else None
+            has_refresh = bool(credentials_dict.get('refresh_token'))
+            
+            # Only validate if we have the required fields (skip for test mocks)
+            if all(k in credentials_dict for k in ['token', 'token_uri', 'client_id', 'client_secret']):
+                # Reconstruct credentials to check validity
+                creds = Credentials(
+                    token=credentials_dict['token'],
+                    refresh_token=credentials_dict.get('refresh_token'),
+                    token_uri=credentials_dict['token_uri'],
+                    client_id=credentials_dict['client_id'],
+                    client_secret=credentials_dict['client_secret'],
+                    scopes=credentials_dict.get('scopes', []),
+                    expiry=expiry
+                )
+                
+                logger.info(f"DEBUG – BEFORE open_by_key for sheet {sheet_id}:")
+                logger.info(f"DEBUG – Scopes: {creds.scopes}")
+                logger.info(f"DEBUG – Valid: {creds.valid}")
+                logger.info(f"DEBUG – Expired: {creds.expired}")
+                logger.info(f"DEBUG – Has refresh_token: {has_refresh}")
+                logger.info(f"DEBUG – Token prefix: {credentials_dict.get('token', '')[:20]}...")
+            else:
+                logger.info(f"DEBUG – Using mock credentials for testing")
         
         logger.info(f"Opening spreadsheet: {sheet_id}")
         
