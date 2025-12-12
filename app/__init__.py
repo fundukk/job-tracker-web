@@ -20,7 +20,7 @@ def create_app():
     load_dotenv()
     
     # Validate required OAuth environment variables at startup
-    required_vars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
+    required_vars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALLBACK_URL']
     missing_vars = [var for var in required_vars if not os.environ.get(var)]
     
     if missing_vars:
@@ -33,7 +33,7 @@ def create_app():
     
     # Log OAuth config status
     client_id_prefix = os.environ.get('GOOGLE_CLIENT_ID', '')[:20]
-    callback_url = os.environ.get('GOOGLE_CALLBACK_URL', 'https://job-tracker-web.onrender.com/auth/google/callback')
+    callback_url = os.environ.get('GOOGLE_CALLBACK_URL', '')
     test_users_count = len([e for e in os.environ.get('GOOGLE_TEST_USERS', '').split(',') if e.strip()])
     print(f"OAuth Config - Client ID prefix: {client_id_prefix}..., Callback URL: {callback_url}, Test users: {test_users_count}")
     

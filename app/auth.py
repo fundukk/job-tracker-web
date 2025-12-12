@@ -58,10 +58,13 @@ def get_oauth_flow():
     # Get required environment variables
     client_id = os.environ.get('GOOGLE_CLIENT_ID')
     client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
-    callback_url = os.environ.get(
-        'GOOGLE_CALLBACK_URL',
-        'https://job-tracker-web.onrender.com/auth/google/callback'
-    )
+    callback_url = os.environ.get('GOOGLE_CALLBACK_URL')
+    if not callback_url:
+        logger.error("GOOGLE_CALLBACK_URL environment variable not set")
+        raise KeyError(
+            "GOOGLE_CALLBACK_URL environment variable not set. "
+            "Please configure this in your environment or Render dashboard."
+        )
     
     # Validate required credentials
     if not client_id:

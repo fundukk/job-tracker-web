@@ -1,4 +1,24 @@
-# Python
+# Environment & secrets
+.env
+.flask_session/
+
+# Google OAuth local credential files (DO NOT COMMIT)
+client_secret*.json
+credentials*.json
+token.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code / editor settings
+.vscode/
+.idea/
+
+# MacOS
+.DS_Store# Python
 *.py[cod]
 *$py.class
 *.so
