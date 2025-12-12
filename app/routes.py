@@ -109,31 +109,38 @@ def set_sheet():
         # DEBUG – REMOVE AFTER DIAGNOSIS: Surface raw Google error instead of generic message
         logger.error(f"Failed to connect to Google Sheet: {str(e)}", exc_info=True)
         
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Check if it's an HttpError and extract details
-        error_msg = str(e)
-        if HttpError and isinstance(e, HttpError):
-            logger.error(f"DEBUG – HTTP status code: {e.resp.status}")
-            logger.error(f"DEBUG – HTTP reason: {e.resp.reason}")
-            try:
-                content_str = e.content.decode('utf-8')
-                logger.error(f"DEBUG – Error content: {content_str}")
-                error_msg = f"Google API Error ({e.resp.status} {e.resp.reason}): {content_str[:200]}"
-            except:
-                logger.error(f"DEBUG – Error content (raw): {e.content}")
-                error_msg = f"Google API Error ({e.resp.status} {e.resp.reason})"
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Extract error_info if attached
+        error_info = getattr(e, 'error_info', None)
         
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Log exception type
-        logger.error(f"DEBUG – Exception type: {type(e).__name__}")
+        diagnostic_lines = [
+            "Connection Error",
+            "",
+            f"Logged-in account: {session.get('user_email', 'unknown')}",
+            f"Sheet ID: {sheet_id}",
+            f"Exception type: {type(e).__name__}",
+            f"Error: {str(e)}",
+        ]
         
-        user_email = session.get('user_email', 'unknown')
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Surface raw error to UI for diagnosis
-        diagnostic_msg = (
-            f"Connection Error: {error_msg}\n\n"
-            f"Diagnostics:\n"
-            f"- Logged-in account: {user_email}\n"
-            f"- Sheet ID: {sheet_id}\n"
-            f"- Exception type: {type(e).__name__}\n"
-        )
+        if error_info:
+            if "http_status" in error_info:
+                diagnostic_lines.append(f"HTTP status: {error_info['http_status']}")
+            if "http_reason" in error_info:
+                diagnostic_lines.append(f"HTTP reason: {error_info['http_reason']}")
+            if "content" in error_info:
+                diagnostic_lines.append("")
+                diagnostic_lines.append("Google API Response:")
+                diagnostic_lines.append(error_info['content'][:1000])
+            if "response" in error_info:
+                diagnostic_lines.append("")
+                diagnostic_lines.append("APIError Response:")
+                diagnostic_lines.append(error_info['response'][:500])
+            if "traceback" in error_info:
+                diagnostic_lines.append("")
+                diagnostic_lines.append("Traceback:")
+                diagnostic_lines.append(error_info['traceback'][:800])
+        
+        diagnostic_msg = "\n".join(diagnostic_lines)
+        logger.error(f"DEBUG – FULL DIAGNOSTICS:\n{diagnostic_msg}")
         flash(diagnostic_msg, 'error')
         return redirect(url_for('main.index'))
 

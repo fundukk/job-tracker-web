@@ -151,18 +151,44 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
     except gspread.exceptions.APIError as e:
         # DEBUG – REMOVE AFTER DIAGNOSIS: Extract Google error details
         logger.error(f"Google API error accessing sheet: {str(e)}", exc_info=True)
+        error_info = {
+            "exception_type": type(e).__name__,
+            "error_str": str(e)
+        }
         if HttpError and isinstance(e, HttpError):
-            logger.error(f"DEBUG – HTTP status code: {e.resp.status}")
-            logger.error(f"DEBUG – HTTP reason: {e.resp.reason}")
+            error_info["http_status"] = e.resp.status
+            error_info["http_reason"] = e.resp.reason
             try:
-                logger.error(f"DEBUG – Error content: {e.content.decode('utf-8')}")
+                error_info["content"] = e.content.decode('utf-8')
+                logger.error(f"DEBUG – Error content: {error_info['content']}")
             except:
+                error_info["content"] = str(e.content)
                 logger.error(f"DEBUG – Error content (raw): {e.content}")
+            logger.error(f"DEBUG – HTTP status code: {error_info['http_status']}")
+            logger.error(f"DEBUG – HTTP reason: {error_info['http_reason']}")
+        # Try to extract from gspread APIError response
+        if hasattr(e, 'response'):
+            try:
+                error_info["response"] = str(e.response)
+                logger.error(f"DEBUG – APIError response: {error_info['response']}")
+            except:
+                pass
+        # Re-raise with attached error_info for route to catch
+        e.error_info = error_info
         raise
     except Exception as e:
         logger.error(f"Unexpected error opening worksheet: {str(e)}", exc_info=True)
-        # DEBUG – REMOVE AFTER DIAGNOSIS: Log exception type and traceback
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Log exception type and attach error info
         logger.error(f"DEBUG – Exception type: {type(e).__name__}")
+        import traceback
+        error_info = {
+            "exception_type": type(e).__name__,
+            "error_str": str(e),
+            "traceback": traceback.format_exc()
+        }
+        logger.error(f"DEBUG – Full traceback: {error_info['traceback']}")
+        # Attach error_info for route to catch
+        e.error_info = error_info
         raise
 
 
