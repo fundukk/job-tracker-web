@@ -7,19 +7,22 @@ import logging
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from app.auth import require_oauth
 from app.sheets import (
-    get_worksheet,
-    append_job_row,
-    replace_last_job,
+    get_worksheet, 
+    append_job_row, 
+    replace_last_job, 
     extract_spreadsheet_id,
     find_job_by_link,
     check_write_access,
 )
 from app.parsers import process_job_url, validate_job_url, parse_handshake_text_wrapper
 from core.salary import normalize_salary
+# DEBUG – REMOVE AFTER DIAGNOSIS
+try:
+    from googleapiclient.errors import HttpError
+except ImportError:
+    HttpError = None
 
-logger = logging.getLogger(__name__)
-
-# Create blueprint
+logger = logging.getLogger(__name__)# Create blueprint
 main_bp = Blueprint('main', __name__)
 
 
@@ -51,6 +54,13 @@ def set_sheet():
         credentials_dict = session.get('credentials')
         user_email = session.get('user_email', 'unknown')
         
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Log diagnostics
+        logger.info(f"DEBUG – USER EMAIL: {user_email}")
+        logger.info(f"DEBUG – SHEET ID: {sheet_id}")
+        if credentials_dict:
+            scopes = credentials_dict.get('scopes', [])
+            logger.info(f"DEBUG – OAUTH SCOPES: {scopes}")
+        
         logger.info(f"Attempting to connect to sheet: {sheet_id} (user: {user_email})")
         ws = get_worksheet(sheet_id, credentials_dict)
         logger.info(f"Sheet opened successfully, checking write access...")
@@ -81,15 +91,35 @@ def set_sheet():
         return redirect(url_for('main.job'))
     
     except Exception as e:
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Surface raw Google error instead of generic message
         logger.error(f"Failed to connect to Google Sheet: {str(e)}", exc_info=True)
+        
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Check if it's an HttpError and extract details
+        error_msg = str(e)
+        if HttpError and isinstance(e, HttpError):
+            logger.error(f"DEBUG – HTTP status code: {e.resp.status}")
+            logger.error(f"DEBUG – HTTP reason: {e.resp.reason}")
+            try:
+                content_str = e.content.decode('utf-8')
+                logger.error(f"DEBUG – Error content: {content_str}")
+                error_msg = f"Google API Error ({e.resp.status} {e.resp.reason}): {content_str[:200]}"
+            except:
+                logger.error(f"DEBUG – Error content (raw): {e.content}")
+                error_msg = f"Google API Error ({e.resp.status} {e.resp.reason})"
+        
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Log exception type
+        logger.error(f"DEBUG – Exception type: {type(e).__name__}")
+        
         user_email = session.get('user_email', 'unknown')
-        msg = 'Could not connect to your Google Sheet. '
-        if user_email and user_email != 'unknown':
-            msg += f"Ensure the sheet is shared with Editor access to {user_email}. "
-        else:
-            msg += 'Ensure the sheet is shared with your Google account. '
-        msg += 'If needed, log out and sign in with the correct account.'
-        flash(msg, 'error')
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Surface raw error to UI for diagnosis
+        diagnostic_msg = (
+            f"Connection Error: {error_msg}\n\n"
+            f"Diagnostics:\n"
+            f"- Logged-in account: {user_email}\n"
+            f"- Sheet ID: {sheet_id}\n"
+            f"- Exception type: {type(e).__name__}\n"
+        )
+        flash(diagnostic_msg, 'error')
         return redirect(url_for('main.index'))
 
 

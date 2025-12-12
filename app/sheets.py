@@ -7,6 +7,11 @@ import logging
 import gspread
 from datetime import date
 from google.oauth2.credentials import Credentials
+# DEBUG – REMOVE AFTER DIAGNOSIS
+try:
+    from googleapiclient.errors import HttpError
+except ImportError:
+    HttpError = None
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +125,11 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
         client = get_gspread_client(credentials_dict)
         sheet_id = extract_spreadsheet_id(sheet_url_or_id)
         
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Log credentials scopes
+        if credentials_dict:
+            scopes = credentials_dict.get('scopes', [])
+            logger.info(f"DEBUG – OAuth scopes attached: {scopes}")
+        
         logger.info(f"Opening spreadsheet: {sheet_id}")
         
         # Open spreadsheet by ID
@@ -137,6 +147,22 @@ def get_worksheet(sheet_url_or_id: str, credentials_dict):
     
     except gspread.exceptions.SpreadsheetNotFound:
         logger.error(f"Spreadsheet not found: {sheet_url_or_id}")
+        raise
+    except gspread.exceptions.APIError as e:
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Extract Google error details
+        logger.error(f"Google API error accessing sheet: {str(e)}", exc_info=True)
+        if HttpError and isinstance(e, HttpError):
+            logger.error(f"DEBUG – HTTP status code: {e.resp.status}")
+            logger.error(f"DEBUG – HTTP reason: {e.resp.reason}")
+            try:
+                logger.error(f"DEBUG – Error content: {e.content.decode('utf-8')}")
+            except:
+                logger.error(f"DEBUG – Error content (raw): {e.content}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error opening worksheet: {str(e)}", exc_info=True)
+        # DEBUG – REMOVE AFTER DIAGNOSIS: Log exception type and traceback
+        logger.error(f"DEBUG – Exception type: {type(e).__name__}")
         raise
 
 
